@@ -15,7 +15,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob
 ## Layout
 
 ```
-/Users/aliz/dev/at/pry/                                    ← primary (main)
+/Users/aliz/dev/at/pry/                                    ← primary (master)
 /Users/aliz/dev/at/pry/.claude/worktrees/bug-12/
 /Users/aliz/dev/at/pry/.claude/worktrees/feat-ownership-verify/
 ```
@@ -31,16 +31,13 @@ Verify ignore status: `git check-ignore -v '.claude/worktrees/'` (keep the trail
 
 Worktree dir drops the slashes: `<type>-<id>`.
 
-## The base branch is `main`
+## The base branch is `master`
 
-Pry's base branch is **`main`**. The remote (`git@github.com:haqaliz/pry.git`)
-**does not exist yet**. Branch from local `main` until a remote exists:
+Pry's base branch is **`master`**. The remote is `git@github.com:haqaliz/pry.git`. Prefer `origin/master` (shared truth; the local ref may be stale):
 
 ```bash
-git worktree add -b feat/ownership-verify/aliz .claude/worktrees/feat-ownership-verify main
-# once a remote exists:
-git fetch origin main
-git worktree add -b feat/ownership-verify/aliz .claude/worktrees/feat-ownership-verify origin/main
+git fetch origin master
+git worktree add -b feat/ownership-verify/aliz .claude/worktrees/feat-ownership-verify origin/master
 ```
 
 ## Creating a worktree
@@ -92,7 +89,7 @@ git -C /Users/aliz/dev/at/pry branch -d feat/ownership-verify/aliz
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `invalid reference: origin/main` | No remote yet | Branch from local `main` |
-| Branching from `master` | Pry's base branch is `main` | Use `main` |
+| `invalid reference: origin/master` | Remote ref not fetched | `git fetch origin master` first, or branch from local `master` |
+| Branching from `master` | Pry's base branch is `master` | Use `master` |
 | `uv sync` fails: no `pyproject.toml` | Greenfield | Scaffold test-first, or skip for docs-only work |
-| `git worktree add` fails: "already checked out" | Branch checked out elsewhere | `git checkout main` there, retry |
+| `git worktree add` fails: "already checked out" | Branch checked out elsewhere | `git checkout master` there, retry |

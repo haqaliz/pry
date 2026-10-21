@@ -8,12 +8,12 @@ arguments: "type id"
 
 ## Overview
 
-Closes out local state after the PR merged: **main → pull → remove worktree →
+Closes out local state after the PR merged: **master → pull → remove worktree →
 delete branch**, with release deferred. No report (use `pry-end` / `pe` for that).
 
 **Invocation:** `pef <type> <id>`.
 
-Pry's base branch is **`main`**.
+Pry's base branch is **`master`**.
 
 ## Pipeline
 
@@ -26,8 +26,8 @@ Pry's base branch is **`main`**.
 
 ```bash
 PRIMARY=$(git worktree list | head -1 | awk '{print $1}')
-git -C "$PRIMARY" checkout main
-git -C "$PRIMARY" pull --ff-only origin main
+git -C "$PRIMARY" checkout master
+git -C "$PRIMARY" pull --ff-only origin master
 ```
 
 ### Phase 2 — Remove worktree, delete branch
@@ -54,7 +54,7 @@ Ask first, draft, confirm, then `gh issue comment`.
 
 | Mistake | Fix |
 |---|---|
-| Checking out / pulling `master` | Pry's base branch is `main` |
+| Checking out / pulling `master` | Pry's base branch is `master` |
 | Using `git pull` | Use `--ff-only` |
 | Forcing branch delete | Only after explicit user OK |
 | Cutting a release | Deferred |

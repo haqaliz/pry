@@ -6,7 +6,8 @@ Goal: dump the issue, its linked issues/PRs, and comments into
 ## Prerequisites
 
 - GitHub CLI authenticated: `gh auth status`.
-- Repo: `haqaliz/pry` — **the remote does not exist yet**. A `FALLBACK` result is
+- Repo: `haqaliz/pry` — the repo exists on GitHub, but likely has no issues filed
+  yet. A `FALLBACK` result is
   the expected case today.
 
 ## 0. Reachability probe

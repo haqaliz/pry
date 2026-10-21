@@ -23,14 +23,15 @@ always test-first via `superpowers:test-driven-development`.
 
 ## Task source: GitHub issue, tolerate absence
 
-Pry's remote does not exist yet. Expect the fallback inline-brief path.
+The repo exists on GitHub but likely has no issues filed yet. Expect the fallback inline-brief path.
 
 ## Pipeline
 
 ### Phase 0 — Isolate in a worktree
 
 **REQUIRED SUB-SKILL:** `pry-worktrees`. Branch `<type>/<id>/aliz`, worktree dir
-`.claude/worktrees/<type>-<id>`, created from `main` (no remote yet).
+`.claude/worktrees/<type>-<id>`, created from `origin/master` (fall back to local
+`master` if the remote ref isn't fetched).
 
 ### Phase 1 — Gather context
 
@@ -87,7 +88,7 @@ docs/planning/
 | Mistake | Fix |
 |---|---|
 | Working in the primary checkout | Create the Phase 0 worktree first |
-| Branching from anything but `main` | No remote exists yet; use local `main` |
+| Branching from anything but `master` | Pry's base branch is `master`; prefer `origin/master` |
 | Treating a missing `pyproject.toml` as fatal | Greenfield — scaffold it, test-first |
 | Skipping the review gate | PRD must be approved before tech-plan |
 | Planning a probe that could run before ownership verification | Stop and flag — P1 gates everything |

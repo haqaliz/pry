@@ -14,7 +14,7 @@ Same cleanup as `pry-end-fast`, plus a completion report via `pry-report`.
 
 ## Pipeline
 
-**REQUIRED SUB-SKILL:** `pry-end-fast`. Run Phase 0 → Phase 2. Base branch `main`.
+**REQUIRED SUB-SKILL:** `pry-end-fast`. Run Phase 0 → Phase 2. Base branch `master`.
 Phase 3 (release) deferred.
 
 ### Phase 4 — Completion report
@@ -36,4 +36,4 @@ Skip if no reachable issue.
 | Mistake | Fix |
 |---|---|
 | Running the report before cleanup | Phases 0–2 first |
-| Cleaning up against `master` | Pry's base branch is `main` |
+| Cleaning up against `master` | Pry's base branch is `master` |
