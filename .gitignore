@@ -1,0 +1,25 @@
+# Claude Code worktrees live inside the repo; never track their contents.
+.claude/worktrees/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Env / secrets (BYOK for any LLM assist)
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Serena tool state (local)
+.serena/
