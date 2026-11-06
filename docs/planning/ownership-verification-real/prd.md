@@ -1,6 +1,6 @@
 # PRD — Ownership Verification, For Real (P1)
 
-- **Status:** Draft, awaiting review gate
+- **Status:** Approved (2026-11-07); implemented on `feat/ownership-verification-real/aliz`
 - **Owner:** aliz
 - **Date:** 2026-11-06
 - **Slug:** `ownership-verification-real`
@@ -238,9 +238,6 @@ used.
   but it enlarges the diff. Keep it mechanical and covered by AT14/AT15.
 - 🟢 **Problem and scope are explicit**, and every must-have has a testable criterion.
 
-**Question I would want answered before greenlighting:** is a local-key HMAC token
-enough for the first release, or does "signed proof" in the architecture doc require an
-asymmetric signature that a third party can verify without the key? The architecture
-text says "independently verifiable"; this PRD interprets that as same-machine
-verification for the CLI slice and defers asymmetric signing to the proof-bundle work
-(P5). Confirm before build.
+**Resolved before build:** local-key HMAC is the v1 ownership token. "Independently
+verifiable" in the architecture text is read as same-machine verification for the CLI
+slice; asymmetric signing is deferred to the P5 proof-bundle work.
