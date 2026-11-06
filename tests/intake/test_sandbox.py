@@ -25,7 +25,7 @@ from pry.intake.errors import (
     IntakeError,
 )
 from pry.intake.project import tree_sha256
-from pry.intake.sandbox import IntakeResult, intake
+from pry.intake.sandbox import IntakeResult, SandboxHandle, intake
 
 DIGEST = "sha256:" + "a" * 64
 CONTAINER = "container123"
@@ -87,9 +87,15 @@ class FakeDocker:
             raise IntakeError(BUILD_FAILED, "npm ERR!")
         return CommandResult(0, self.build_output, b"", False)
 
-    def start(self, image, workspace, name, command, port, timeout=60):
+    def start(
+        self, image, workspace, name, command, port, timeout=60,
+        network="none", alias=None,
+    ):
         self.calls.append(
-            ("start", image, str(workspace), name, list(command), port)
+            (
+                "start", image, str(workspace), name, list(command), port,
+                network, alias,
+            )
         )
         if self.fail_start:
             raise IntakeError(START_FAILED, "boom")
@@ -275,10 +281,69 @@ def test_static_success_writes_ready_snapshot_and_cleans_up(tmp_path):
     assert start_call[3].startswith("pry-")
     assert start_call[4] == STATIC_START
     assert start_call[5] == 8000
+    assert start_call[6:] == ("none", None)
     ready_call = _call(fake, "wait_ready")[0]
     assert ready_call[1:] == (CONTAINER, "static", 8000, 60)
 
     assert tree_sha256(repo) == before
+
+
+def test_probe_network_starts_the_app_with_the_alias_and_records_url(tmp_path):
+    repo = _static_repo(tmp_path / "repo")
+    out = tmp_path / "run"
+    fake = FakeDocker()
+
+    result = intake(str(repo), out=out, network="pry-abc", docker=fake)
+
+    start_call = _call(fake, "start")[0]
+    assert start_call[6] == "pry-abc"
+    assert start_call[7] == "app"
+    data = _snapshot(out)
+    assert data["sandbox"]["network"] == "pry-abc"
+    assert data["sandbox"]["internal_url"] == "http://app:8000"
+    assert not result.workspace.exists()
+
+
+def test_on_ready_receives_a_handle_before_the_success_snapshot(tmp_path):
+    repo = _static_repo(tmp_path / "repo")
+    out = tmp_path / "run"
+    fake = FakeDocker()
+    seen = []
+
+    def on_ready(handle):
+        assert fake.calls[-1][0] == "wait_ready"
+        assert not (out / "run.log").exists()
+        assert not (out / "snapshot.json").exists()
+        seen.append(handle)
+
+    result = intake(str(repo), out=out, on_ready=on_ready, docker=fake)
+
+    assert seen == [
+        SandboxHandle(
+            CONTAINER, result.workspace, 8000, "static", result.snapshot["sandbox_id"]
+        )
+    ]
+    assert fake.removed == [CONTAINER]
+    assert not result.workspace.exists()
+
+
+def test_on_ready_failure_cleans_up_and_records_the_failure(tmp_path, copied):
+    repo = _static_repo(tmp_path / "repo")
+    out = tmp_path / "run"
+    fake = FakeDocker()
+
+    def on_ready(handle):
+        raise RuntimeError("sidecar did not start")
+
+    with pytest.raises(IntakeError) as exc:
+        intake(str(repo), out=out, on_ready=on_ready, docker=fake)
+
+    assert exc.value.cause == SANDBOX_ERROR
+    assert fake.removed == [CONTAINER]
+    assert not copied[0].exists()
+    data = _snapshot(out)
+    assert data["result"]["status"] == "failed"
+    assert data["result"]["cause"] == SANDBOX_ERROR
 
 
 def test_default_run_dir_matches_sandbox_id(tmp_path):

@@ -50,6 +50,15 @@ class IntakeResult:
     kept: bool
 
 
+@dataclass(frozen=True)
+class SandboxHandle:
+    container_id: str
+    workspace: Path
+    port: int
+    kind: str
+    sandbox_id: str
+
+
 def _validated_path(path) -> Path:
     original = Path(path).expanduser()
     if not original.is_dir():
@@ -184,6 +193,8 @@ def intake(
     timeout=None,
     docker=None,
     home=None,
+    network=None,
+    on_ready=None,
 ) -> IntakeResult:
     original = _validated_path(path)
     if port is not None and (not isinstance(port, int) or not 1 <= port <= 65535):
@@ -274,7 +285,11 @@ def intake(
         )
         sandbox["user"] = _host_user(runner)
         sandbox["limits"] = _limits(runner)
-        sandbox["internal_url"] = "http://127.0.0.1:%d" % spec.port
+        if network:
+            sandbox["network"] = network
+            sandbox["internal_url"] = "http://app:%d" % spec.port
+        else:
+            sandbox["internal_url"] = "http://127.0.0.1:%d" % spec.port
 
         if not runner.available():
             raise IntakeError(DOCKER_UNAVAILABLE, "docker daemon is not available")
@@ -296,11 +311,28 @@ def intake(
 
         start_attempted = True
         container = runner.start(
-            spec.image, workspace, sandbox_id, spec.start, spec.port
+            spec.image,
+            workspace,
+            sandbox_id,
+            spec.start,
+            spec.port,
+            network=network or "none",
+            alias="app" if network else None,
         )
         sandbox["container_id"] = container
         ready_timeout = READY_TIMEOUT_SECONDS if timeout is None else timeout
         runner.wait_ready(container, spec.kind, spec.port, timeout=ready_timeout)
+
+        if on_ready is not None:
+            on_ready(
+                SandboxHandle(
+                    container_id=container,
+                    workspace=workspace,
+                    port=spec.port,
+                    kind=spec.kind,
+                    sandbox_id=sandbox_id,
+                )
+            )
 
         write_log(run_dir, RUN_LOG, runner.logs(container))
         result.update(

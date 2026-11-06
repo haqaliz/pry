@@ -213,8 +213,16 @@ class DockerRunner:
         command: Sequence[str],
         port: int,
         timeout: float = START_TIMEOUT,
+        network: str = "none",
+        alias: Optional[str] = None,
     ) -> str:
-        args = ["run", "-d", "--name", name, "--network=none"]
+        args = ["run", "-d", "--name", name]
+        if network == "none":
+            args.append("--network=none")
+        else:
+            args.append("--network=%s" % network)
+            if alias:
+                args.append("--network-alias=%s" % alias)
         args += self._security_args()
         args += self._mount_args(workspace)
         args += ["-e", "PORT=%d" % port, image]
@@ -224,6 +232,44 @@ class DockerRunner:
         if not container_id:
             raise IntakeError(START_FAILED, "docker start returned no container id")
         return container_id
+
+    def start_sidecar(
+        self,
+        network: str,
+        name: str,
+        script_path,
+        image: str = "python:3.9-slim",
+        timeout: float = START_TIMEOUT,
+    ) -> str:
+        args = ["run", "-d", "--name", name, "--network=%s" % network]
+        args += self._security_args()
+        args += ["-v", "%s:/pry/sidecar.py:ro" % script_path]
+        args += [image, "python", "-c", "import time; time.sleep(86400)"]
+        result = self._checked(args, timeout, START_FAILED, "start sidecar")
+        container_id = result.stdout.decode("utf-8", "replace").strip()
+        if not container_id:
+            raise IntakeError(START_FAILED, "docker start returned no container id")
+        return container_id
+
+    def create_network(self, name: str, timeout: float = START_TIMEOUT) -> None:
+        self._checked(
+            ["network", "create", "--internal", name],
+            timeout,
+            SANDBOX_ERROR,
+            "docker network create",
+        )
+
+    def remove_network(self, name: str, timeout: float = 30) -> None:
+        result = self._run(["network", "rm", name], timeout)
+        self._require_daemon(result)
+        if result.timed_out:
+            raise IntakeError(SANDBOX_ERROR, "docker network rm timed out")
+        if result.returncode == 0:
+            return
+        detail = _detail(result)
+        if "no such network" in detail.lower():
+            return
+        raise IntakeError(SANDBOX_ERROR, "docker network rm failed: %s" % detail)
 
     def exec(
         self, container: str, command: Sequence[str], timeout: float = 10

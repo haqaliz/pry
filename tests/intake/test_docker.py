@@ -212,14 +212,25 @@ def test_default_user_is_the_host_user(tmp_path):
 
 def test_no_forbidden_host_access_flag_ever_appears(tmp_path):
     fake = FakeRunner(
-        [CommandResult(0, b"", b"", False), CommandResult(0, b"pry-1\n", b"", False)]
+        [
+            CommandResult(0, b"", b"", False),
+            CommandResult(0, b"pry-1\n", b"", False),
+            CommandResult(0, b"pry-sidecar\n", b"", False),
+        ]
     )
     docker = DockerRunner(runner=fake, uid=501, gid=20)
+    script = tmp_path / "sidecar.py"
+    script.write_text("")
 
     docker.build("img", tmp_path, ["true"])
     docker.start("img", tmp_path, "pry-1", ["true"], 3000)
+    docker.start_sidecar("pry-net", "pry-sidecar", script)
+    docker.create_network("pry-net")
+    docker.remove_network("pry-net")
 
     for argv, _ in fake.calls:
+        assert "-p" not in argv
+        assert "-P" not in argv
         for token in argv:
             for forbidden in FORBIDDEN:
                 assert forbidden not in token, (forbidden, argv)
@@ -278,6 +289,141 @@ def test_start_without_container_id_is_start_failed(tmp_path):
     with pytest.raises(IntakeError) as exc:
         DockerRunner(runner=fake).start(
             "img", tmp_path, "pry-1", ["npm", "run", "start"], 3000
+        )
+
+    assert exc.value.cause == START_FAILED
+
+
+def test_create_network_uses_the_internal_flag():
+    fake = FakeRunner([CommandResult(0, b"", b"", False)])
+
+    DockerRunner(runner=fake).create_network("pry-abc")
+
+    assert fake.calls[0][0] == [
+        "docker",
+        "network",
+        "create",
+        "--internal",
+        "pry-abc",
+    ]
+
+
+def test_create_network_failure_is_sandbox_error():
+    fake = FakeRunner([CommandResult(1, b"", b"network already exists", False)])
+
+    with pytest.raises(IntakeError) as exc:
+        DockerRunner(runner=fake).create_network("pry-abc")
+
+    assert exc.value.cause == SANDBOX_ERROR
+
+
+def test_remove_network_tolerates_a_missing_network():
+    fake = FakeRunner(
+        [CommandResult(1, b"", b"Error: No such network: pry-abc", False)]
+    )
+
+    DockerRunner(runner=fake).remove_network("pry-abc")
+
+    assert fake.calls[0][0] == ["docker", "network", "rm", "pry-abc"]
+
+
+def test_remove_network_other_failure_is_sandbox_error():
+    fake = FakeRunner([CommandResult(1, b"", b"permission denied", False)])
+
+    with pytest.raises(IntakeError) as exc:
+        DockerRunner(runner=fake).remove_network("pry-abc")
+
+    assert exc.value.cause == SANDBOX_ERROR
+
+
+def test_start_on_a_probe_network_uses_the_app_alias(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"container123\n", b"", False)])
+    workspace = tmp_path / "copy"
+
+    container = DockerRunner(runner=fake, uid=501, gid=20).start(
+        "node:22-bookworm-slim",
+        workspace,
+        "pry-abc",
+        ["npm", "run", "start"],
+        3000,
+        network="pry-abc",
+        alias="app",
+    )
+
+    assert container == "container123"
+    argv, _ = fake.calls[0]
+    assert "--network=pry-abc" in argv
+    assert "--network-alias=app" in argv
+    assert "--network=none" not in argv
+    assert "-p" not in argv
+    assert "-P" not in argv
+    _assert_security(argv)
+    _pair(argv, "-e", "PORT=3000")
+
+
+def test_start_without_an_alias_has_no_network_alias(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"container123\n", b"", False)])
+
+    DockerRunner(runner=fake, uid=501, gid=20).start(
+        "node:22-bookworm-slim",
+        tmp_path,
+        "pry-abc",
+        ["npm", "run", "start"],
+        3000,
+        network="pry-abc",
+    )
+
+    argv, _ = fake.calls[0]
+    assert "--network=pry-abc" in argv
+    assert not any(token.startswith("--network-alias") for token in argv)
+
+
+def test_start_sidecar_joins_the_network_with_security_flags_only(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"sidecar123\n", b"", False)])
+    script = tmp_path / "sidecar.py"
+    script.write_text("")
+
+    container = DockerRunner(runner=fake, uid=501, gid=20).start_sidecar(
+        "pry-abc", "pry-sidecar", script
+    )
+
+    assert container == "sidecar123"
+    argv, _ = fake.calls[0]
+    assert argv[:3] == ["docker", "run", "-d"]
+    _pair(argv, "--name", "pry-sidecar")
+    assert "--network=pry-abc" in argv
+    assert "--network=none" not in argv
+    assert "-p" not in argv
+    assert "-P" not in argv
+    _assert_security(argv)
+    _pair(argv, "-v", "%s:/pry/sidecar.py:ro" % script)
+    assert argv[-4:] == [
+        "python:3.9-slim",
+        "python",
+        "-c",
+        "import time; time.sleep(86400)",
+    ]
+
+
+def test_start_sidecar_accepts_a_custom_image(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"sidecar123\n", b"", False)])
+    script = tmp_path / "sidecar.py"
+    script.write_text("")
+
+    DockerRunner(runner=fake).start_sidecar(
+        "pry-abc", "pry-sidecar", script, image="python:3.13-slim"
+    )
+
+    argv, _ = fake.calls[0]
+    assert argv[-4] == "python:3.13-slim"
+
+
+def test_start_sidecar_nonzero_is_start_failed(tmp_path):
+    fake = FakeRunner([CommandResult(125, b"", b"no such image", False)])
+
+    with pytest.raises(IntakeError) as exc:
+        DockerRunner(runner=fake).start_sidecar(
+            "pry-abc", "pry-sidecar", tmp_path / "sidecar.py"
         )
 
     assert exc.value.cause == START_FAILED
