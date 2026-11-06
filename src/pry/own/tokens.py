@@ -51,7 +51,7 @@ class TokenSigner:
             key_path = os.environ.get("PRY_KEY_FILE") or os.path.expanduser(
                 "~/.pry/ownership.key"
             )
-        self.key_path = os.fspath(key_path)
+        self.key_path = os.path.expanduser(os.fspath(key_path))
         self._key = self._load_or_create_key()
 
     def _load_or_create_key(self) -> bytes:

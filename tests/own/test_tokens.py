@@ -51,6 +51,15 @@ def test_token_format_and_canonical_payload(tmp_path):
     assert len(base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))) == 32
 
 
+def test_pry_key_file_env_expands_user(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PRY_KEY_FILE", "~/nested/ownership.key")
+
+    TokenSigner()
+
+    assert (tmp_path / "nested" / "ownership.key").exists()
+
+
 def test_key_file_created_with_secure_permissions(tmp_path):
     key_path = tmp_path / "nested" / "ownership.key"
 

@@ -111,6 +111,14 @@ def test_scan_without_token_is_rejected(capsys):
     assert "UNVERIFIED" in capsys.readouterr().out
 
 
+def test_scan_without_token_does_not_create_a_key(tmp_path, monkeypatch):
+    key_path = tmp_path / "should-not-exist"
+    monkeypatch.setenv("PRY_KEY_FILE", str(key_path))
+
+    assert main(["scan", TARGET]) == 2
+    assert not key_path.exists()
+
+
 def test_scan_empty_token_is_rejected(capsys):
     assert main(["scan", TARGET, "--token", ""]) == 2
     assert "UNVERIFIED" in capsys.readouterr().out

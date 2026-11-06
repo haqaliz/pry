@@ -166,7 +166,8 @@ def cmd_verify(args) -> int:
 def cmd_scan(args) -> int:
     try:
         target = normalize_target(args.target)
-        proof = TokenSigner().validate(_resolve_token(args), target)
+        token = _resolve_token(args)
+        proof = TokenSigner().validate(token, target)
     except OwnershipError as exc:
         _print_error(exc)
         return 2
