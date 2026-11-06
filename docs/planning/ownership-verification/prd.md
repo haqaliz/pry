@@ -1,5 +1,8 @@
 # Ownership Verification PRD
 
+> **Superseded.** This PRD described the mock P1 scaffold. The implemented capability is
+> specified in `docs/planning/ownership-verification-real/prd.md`.
+
 ## Overview
 
 The ownership verification capability (P1) implements methods to verify that a user controls a target before any scanning or probing can proceed. This is the structural foundation for all downstream capabilities in Pry.

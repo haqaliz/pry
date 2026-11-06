@@ -16,8 +16,9 @@ data it should not have returned.
 The name: to *pry* something open is to force it, physically, to see whether it holds. Pry asks
 of an app: *does it actually hold, or does it give?*
 
-Status: **day zero.** Nothing is built. This file, `VISION.md`, and `docs/` are all that exist.
-Do not describe capability that isn't there yet.
+Status: **P1 ownership gate implemented; P2 onward not started.** The gate lives in
+`src/pry/own/` and is covered by offline tests. `pry scan` reports `UNVERIFIED` until the
+probe suite exists. Do not describe capability that isn't there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed
@@ -41,7 +42,7 @@ sensitive data and no basic controls). Standalone: no code dependency on sibling
 
 1. **Ownership is proven before anything runs, at every intensity level, including the lowest.**
    No scan of a target the user has not proven they control. See `docs/technical/ARCHITECTURE.md`
-   for the verification mechanism (DNS TXT / well-known file / account-linking).
+   for the verification mechanism (DNS TXT / well-known file; account linking deferred).
 2. **Read-only by default. Higher intensity requires explicit, per-target confirmation.** The user
    selects an intensity level before each run; the floor (always-on, read-only checks) cannot be
    disabled, and anything beyond read-only requires an explicit warning and confirmation,

@@ -1,6 +1,6 @@
 # Pry: Architecture
 
-Design intent, not built behavior. Nothing is implemented yet.
+Design intent, not built behavior. P1 is implemented; P2 onward is design intent.
 
 ## Pipeline
 
@@ -8,7 +8,7 @@ Design intent, not built behavior. Nothing is implemented yet.
 target (local repo | live URL)
         |
         v
-  P1 ownership verification  (DNS TXT | well-known file | account-link)
+  P1 ownership verification  (DNS TXT | well-known file; account-link deferred)
         |  (gates everything below, at every intensity, including level 0)
         v
   P2 intake  ---->  pinned snapshot (sandbox boot, or recorded live endpoint set)
