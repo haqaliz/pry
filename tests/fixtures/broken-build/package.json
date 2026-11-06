@@ -1,0 +1,9 @@
+{
+  "name": "pry-broken-build",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node -e \"process.exit(1)\"",
+    "start": "node server.js"
+  }
+}
