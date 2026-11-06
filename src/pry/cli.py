@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
+from pry.intake import intake
+from pry.intake.errors import IntakeError
 from pry.own.errors import (
     BAD_CHALLENGE,
     INTENSITY_INSUFFICIENT,
@@ -59,6 +61,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--confirm",
         action="store_true",
         help="Confirm higher-intensity actions (not usable yet)",
+    )
+
+    intake_parser = subparsers.add_parser(
+        "intake", help="Boot a local repository in a Docker sandbox"
+    )
+    intake_parser.add_argument("path", help="Path to the local repository")
+    intake_parser.add_argument("--json", action="store_true", help="Print JSON")
+    intake_parser.add_argument(
+        "--out", help="Run directory (default: ~/.pry/runs/<id>)"
+    )
+    intake_parser.add_argument(
+        "--keep", action="store_true", help="Keep the container and workspace"
+    )
+    intake_parser.add_argument(
+        "--port", type=int, help="Port the app listens on inside the sandbox"
+    )
+    intake_parser.add_argument(
+        "--timeout", type=float, help="Readiness timeout in seconds"
     )
 
     return parser
@@ -188,6 +208,22 @@ def run_scan(proof: OwnershipToken) -> int:
     return 1
 
 
+def cmd_intake(args) -> int:
+    try:
+        result = intake(
+            args.path,
+            out=args.out,
+            keep=args.keep,
+            port=args.port,
+            timeout=args.timeout,
+        )
+    except IntakeError as exc:
+        print("UNVERIFIED: %s: %s" % (exc.cause, exc.message))
+        return 1
+    print(result.snapshot_path)
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -196,6 +232,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     if args.command == "verify-ownership":
         return cmd_verify(args)
+    if args.command == "intake":
+        return cmd_intake(args)
     return cmd_scan(args)
 
 
