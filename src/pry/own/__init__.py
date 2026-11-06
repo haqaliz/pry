@@ -1,7 +1,6 @@
-"""
-Ownership verification package for Pry.
-Handles DNS TXT, well-known file, and account-linking methods 
-for proving ownership before any scanning occurs.
-"""
+"""Ownership verification primitives for Pry."""
 
-# Package initializer - empty for now
+from pry.own.errors import OwnershipError
+from pry.own.target import Target, normalize_target
+
+__all__ = ["OwnershipError", "Target", "normalize_target"]
