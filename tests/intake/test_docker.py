@@ -86,16 +86,31 @@ def test_available_is_false_on_timeout():
     assert DockerRunner(runner=fake).available() is False
 
 
+def test_ensure_image_uses_a_cached_image_without_pulling():
+    fake = FakeRunner([CommandResult(0, (DIGEST + "\n").encode())])
+
+    digest = DockerRunner(runner=fake).ensure_image("node:22-bookworm-slim")
+
+    assert digest == DIGEST
+    assert len(fake.calls) == 1
+    assert fake.calls[0][0][:3] == ["docker", "image", "inspect"]
+
+
 def test_ensure_image_pulls_then_reads_the_repo_digest():
     fake = FakeRunner(
-        [CommandResult(0, b"", b"", False), CommandResult(0, (DIGEST + "\n").encode())]
+        [
+            CommandResult(1, b"", b"no such image", False),
+            CommandResult(0, b"", b"", False),
+            CommandResult(0, (DIGEST + "\n").encode(), b"", False),
+        ]
     )
 
     digest = DockerRunner(runner=fake).ensure_image("node:22-bookworm-slim")
 
     assert digest == DIGEST
-    assert fake.calls[0][0] == ["docker", "pull", "node:22-bookworm-slim"]
-    assert fake.calls[1][0] == [
+    assert fake.calls[0][0][:3] == ["docker", "image", "inspect"]
+    assert fake.calls[1][0] == ["docker", "pull", "node:22-bookworm-slim"]
+    assert fake.calls[2][0] == [
         "docker",
         "image",
         "inspect",
@@ -106,7 +121,12 @@ def test_ensure_image_pulls_then_reads_the_repo_digest():
 
 
 def test_ensure_image_failure_is_sandbox_error():
-    fake = FakeRunner([CommandResult(1, b"", b"manifest unknown", False)])
+    fake = FakeRunner(
+        [
+            CommandResult(1, b"", b"no such image", False),
+            CommandResult(1, b"", b"manifest unknown", False),
+        ]
+    )
 
     with pytest.raises(IntakeError) as exc:
         DockerRunner(runner=fake).ensure_image("node:22-bookworm-slim")

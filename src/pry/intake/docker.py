@@ -165,9 +165,23 @@ class DockerRunner:
         return result.returncode == 0 and not result.timed_out
 
     def ensure_image(self, image: str, timeout: float = BUILD_TIMEOUT) -> str:
+        inspect_args = [
+            "image",
+            "inspect",
+            "--format",
+            "{{index .RepoDigests 0}}",
+            image,
+        ]
+        cached = self._run(inspect_args, timeout)
+        self._require_daemon(cached)
+        if cached.returncode == 0 and not cached.timed_out:
+            digest = cached.stdout.decode("utf-8", "replace").strip()
+            if digest:
+                return digest
+
         self._checked(["pull", image], timeout, SANDBOX_ERROR, "docker pull %s" % image)
         result = self._checked(
-            ["image", "inspect", "--format", "{{index .RepoDigests 0}}", image],
+            inspect_args,
             timeout,
             SANDBOX_ERROR,
             "docker image inspect %s" % image,
