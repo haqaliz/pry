@@ -1,70 +1,68 @@
-# Ownership Verification, For Real (P1)
+# Target Intake, For Real (P2)
 
 - **Type:** feat
-- **Slug:** `ownership-verification-real`
+- **Slug:** `target-intake-real`
 - **Owner:** aliz
-- **Source:** inline brief. `gh issue view ownership-verification-real` does not resolve
-  (slug, not an issue number), so this file is the brief per the fallback path.
-- **Capability:** P1 — ownership verification. Gates every other capability (P2–P7).
+- **Source:** inline brief. No GitHub issue for this slug; this file is the brief.
+- **Capability:** P2 — target intake. Depends on P1, which is merged.
 
 ## Brief
 
-Replace the mock P1 gate with a real, fail-closed ownership check. A target must prove
-control through a real DNS TXT lookup or a real `.well-known` file fetch before
-`pry scan` will run. Successful verification issues a signed token bound to the
-normalized target with an expiry; `pry scan` validates signature, target, and expiry
-before doing anything else. Account-linking is removed from the CLI until it is real.
-The false "complete" and "P3 implemented" claims in the docs are corrected in the same
-change.
+Boot a local repository in an isolated sandbox and record a pinned snapshot of exactly
+what was tested. This is the first half of P2; live-URL intake is a separate slice.
+The sandbox must be real: a copy of the repo, a container with no host socket, no host
+filesystem mount, resource limits, a build phase that may use the network, and a run
+phase with no outbound network. The output is a snapshot that P3 can attribute every
+finding to.
 
-## Current state (evidence)
+## Current state
 
-| Claim | Reality |
-|---|---|
-| P1 verifies ownership | `src/pry/own/verification.py:43,60,78` return `(True, None)` unconditionally |
-| Scan requires a valid token | `src/pry/cli.py:114-120` accepts any non-empty string, then prints a simulation |
-| Tests cover verification | `tests/own/test_ownership_verification.py:40` asserts `is_verified is True or error is not None` — passes either way |
-| P1 complete | `README.md:65`, `docs/planning/ownership-verification/IMPLEMENTATION_SUMMARY.md:3` |
-| P3 implemented | Commit `6dda41d` says so; no `src/pry/probes/` exists on `master` |
+- `master` has P1 only. There is no `src/pry/intake/` directory.
+- The old `feat-target-intake-aliz` commit `0f51bc5` is a mock: it creates a temp
+  directory and writes a placeholder `snapshot.json`; it does not boot, isolate, or
+  inspect anything. It is not a dependency and must not be merged.
+- Docker 29.9.2 is installed and the daemon is running. Node 22 is available on the host
+  for fixture creation, but the sandbox must not depend on host Node.
 
-## Scope (must-have)
+## Scope (provisional, confirm in interview)
 
-1. Real DNS TXT lookup against a resolver; exact record match.
-2. Real HTTPS fetch of the well-known file; exact content match.
-3. Fail closed: wrong/missing content, NXDOMAIN, timeout, non-200, cross-host redirect → no token.
-4. HMAC-signed token bound to the normalized target, with expiry and proof type.
-5. `pry scan` validates the token; no/empty/garbage/wrong-target/expired token → exit 2
-   before any target network call.
-6. Account-linking removed from the CLI and README until implemented for real.
-7. Offline tests: injected DNS resolver and a local HTTP fixture, no third-party targets.
-8. Correct the false completion claims in `README.md` and the implementation summary.
+1. Local repo intake only. Live URL intake is deferred.
+2. Docker-backed sandbox runner; no host socket, no privileged mode.
+3. Supported target slice: static sites and Node/Next apps (confirm).
+4. Detect the app type and start command; build with network allowed; run with no egress.
+5. Readiness check inside the sandbox; record the reachable internal URL.
+6. Pinned snapshot JSON: original path, git commit, dirty state, file hashes, lockfile
+   hash, base image digest, runtime versions, build command, start command, port,
+   timestamps, and sandbox id.
+7. Cleanup on success, failure, timeout, and interrupt. Never leave a container running.
+8. Clear failure causes: `REPO_NOT_FOUND`, `UNSUPPORTED_PROJECT`, `BUILD_FAILED`,
+   `START_FAILED`, `READY_TIMEOUT`, `SANDBOX_ERROR`, `DOCKER_UNAVAILABLE`.
 
 ## Out of scope
 
-- P2 intake / sandbox boot.
-- P3 floor probes (despite the commit message, none exist on `master`).
-- Any live-target scanning.
-- Real OAuth account linking.
-- Token revocation, key rotation, multi-user/hosted concerns.
+- Floor probes, exploit reproduction, or any verdict.
+- Live URL intake and ownership-token plumbing for URLs.
+- Python/Flask/Django intake (defer unless the interview says otherwise).
+- Write-based checks, hosted sandboxing, GPU, Windows.
+- Modifying the source repo. The sandbox works on a copy.
 
-## Acceptance criteria
+## Acceptance criteria (draft)
 
-- Correct TXT record → verified; wrong or missing record → not verified.
-- Correct well-known body at the fixed path → verified; 404, wrong body, or a redirect
-  whose final host differs → not verified.
-- DNS/HTTP errors (NXDOMAIN, timeout, connection failure) → not verified, with a named
-  cause; never a traceback.
-- Token is signed, target-bound, and expires; tampered, expired, and wrong-target tokens
-  are rejected.
-- `pry scan` exits 2 and makes no target request with an absent, empty, garbage,
-  wrong-target, or expired token.
-- A verification call with no method selected fails closed.
-- The full suite runs offline and the previously tautological tests are replaced by
-  positive and negative assertions.
+- A fixture static site boots in the sandbox and answers a readiness request.
+- A fixture Node app installs, builds, and boots, then answers a readiness request.
+- The run phase has no outbound network; a fixture that tries to reach the internet
+  fails.
+- The host repo is unchanged after intake (same git status and file hashes).
+- A build or start failure returns the named cause and leaves no container.
+- The snapshot records the commit, dirty state, lockfile hash, image digest, start
+  command, port, and timestamps.
+- Docker unavailable → `DOCKER_UNAVAILABLE`, no partial sandbox.
+- Tests are offline: Docker is faked at the runner boundary; one opt-in integration test
+  uses Docker and small local fixtures, never a third-party target.
 
 ## Notes
 
-- Base branch `master`; branch `feat/ownership-verification-real/aliz`.
-- Unmerged P2/P3 work exists in a separate worktree (`feat-target-intake-aliz`); it is
-  not on `master` and is out of scope here.
-- Open decisions for the interview: DNS resolver dependency, token key storage.
+- Local repo intake does not need a P1 token: the user already has the files. Any target
+  reached over the network still requires P1.
+- `ETHICS.md` is still missing and must land before P3, not before P2.
+- Base branch `master`; branch `feat/target-intake-real/aliz`.
