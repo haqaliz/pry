@@ -1,6 +1,8 @@
 # PRD — Target Intake, For Real (P2)
 
-- **Status:** Draft, awaiting review gate
+- **Status:** Merged to `master` (2026-11-07). Static, Node, egress-blocked, and
+  build-failure fixtures pass, including the opt-in Docker suite. Live URL intake and probes
+  remain deferred.
 - **Owner:** aliz
 - **Date:** 2026-11-07
 - **Slug:** `target-intake-real`

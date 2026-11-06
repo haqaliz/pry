@@ -3,7 +3,7 @@
 - **Feature:** `target-intake-real`
 - **Aspect:** `local-sandbox`
 - **PRD:** `../prd.md`
-- **Status:** Approved (2026-11-07)
+- **Status:** Implemented and merged (2026-11-07)
 
 ## Problem slice
 
