@@ -6,8 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 from pry.cli import main
-from pry.intake import intake
-from pry.intake.errors import SANDBOX_ERROR, IntakeError
 
 
 def test_intake_help_exits_zero():
@@ -31,11 +29,3 @@ def test_intake_success_prints_snapshot_path(monkeypatch, capsys):
 
     assert main(["intake", "."]) == 0
     assert str(snapshot) in capsys.readouterr().out
-
-
-def test_intake_placeholder_is_not_implemented(tmp_path):
-    with pytest.raises(IntakeError) as exc:
-        intake(str(tmp_path))
-
-    assert exc.value.cause == SANDBOX_ERROR
-    assert exc.value.message == "not implemented"
