@@ -183,10 +183,17 @@ def intake(
     port=None,
     timeout=None,
     docker=None,
+    home=None,
 ) -> IntakeResult:
     original = _validated_path(path)
-    run_dir = new_run_dir(out)
+    if port is not None and (not isinstance(port, int) or not 1 <= port <= 65535):
+        raise IntakeError(SANDBOX_ERROR, "port must be between 1 and 65535")
     sandbox_id = snapshot_id()
+    if out is None:
+        base = Path(home) if home is not None else Path.home()
+        run_dir = new_run_dir(base / ".pry" / "runs" / sandbox_id)
+    else:
+        run_dir = new_run_dir(out)
     created_at = utc_now()
 
     target = {

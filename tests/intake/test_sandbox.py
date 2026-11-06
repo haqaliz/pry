@@ -281,6 +281,24 @@ def test_static_success_writes_ready_snapshot_and_cleans_up(tmp_path):
     assert tree_sha256(repo) == before
 
 
+def test_default_run_dir_matches_sandbox_id(tmp_path):
+    repo = _static_repo(tmp_path / "repo")
+
+    result = intake(str(repo), home=tmp_path, docker=FakeDocker())
+
+    assert result.snapshot_path.parent.name == result.snapshot["sandbox_id"]
+
+
+@pytest.mark.parametrize("port", [0, -1, 70000])
+def test_invalid_port_is_rejected(tmp_path, port):
+    repo = _static_repo(tmp_path / "repo")
+
+    with pytest.raises(IntakeError) as exc:
+        intake(str(repo), out=tmp_path / "run", port=port, docker=FakeDocker())
+
+    assert exc.value.cause == SANDBOX_ERROR
+
+
 def test_port_override_rebuilds_the_static_start_command(tmp_path):
     repo = _static_repo(tmp_path / "repo")
     out = tmp_path / "run"
