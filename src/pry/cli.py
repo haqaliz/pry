@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import List, Optional
 
@@ -19,8 +20,11 @@ from pry.own.errors import (
 from pry.own.target import Target, normalize_target
 from pry.own.tokens import OwnershipToken, TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
+from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
+from pry.probe.scan import scan_local
 
 _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHOD}
+_PROBE_INCONCLUSIVE = ("PROBE_INCONCLUSIVE", "probe suite not implemented")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--json", action="store_true", help="Print JSON")
 
     scan = subparsers.add_parser("scan", help="Scan a target that has been verified")
-    scan.add_argument("target", help="URL or bare host to scan")
+    scan.add_argument("target", help="URL, bare host, or local repository path")
     scan.add_argument("--token", help="Ownership token from verify-ownership")
     scan.add_argument("--token-file", help="Read the ownership token from a file")
     scan.add_argument(
@@ -61,6 +65,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--confirm",
         action="store_true",
         help="Confirm higher-intensity actions (not usable yet)",
+    )
+    scan.add_argument("--json", action="store_true", help="Print JSON")
+    scan.add_argument(
+        "--out", help="Run directory for a local scan (default: ~/.pry/runs/<id>)"
+    )
+    scan.add_argument(
+        "--timeout", type=float, help="Sandbox readiness timeout in seconds"
+    )
+    scan.add_argument(
+        "--port", type=int, help="Port the app listens on inside the sandbox"
     )
 
     intake_parser = subparsers.add_parser(
@@ -183,7 +197,59 @@ def cmd_verify(args) -> int:
     return 0
 
 
+def _looks_local(value: str) -> bool:
+    """A URL always has a scheme; otherwise a directory or path-like string is local."""
+    if "://" in value:
+        return False
+    if Path(value).expanduser().is_dir():
+        return True
+    return value.startswith((".", "/", "~")) or "/" in value or "\\" in value
+
+
+def _probe_line(result: ProbeResult) -> str:
+    return "%s: %s: %s" % (result.probe, result.verdict, result.evidence)
+
+
+def _scan_target_path(args) -> int:
+    if args.level != 0:
+        _print_error(
+            OwnershipError(INTENSITY_INSUFFICIENT, "only level 0 is implemented")
+        )
+        return 2
+
+    try:
+        outcome = scan_local(
+            args.target, out=args.out, timeout=args.timeout, port=args.port
+        )
+    except (IntakeError, ProbeError) as exc:
+        _print_error(exc)
+        return 2
+
+    summary = summarize(outcome.results)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "snapshot": outcome.snapshot,
+                    "results": [asdict(result) for result in outcome.results],
+                    "summary": summary,
+                    "results_path": str(outcome.results_path),
+                },
+                sort_keys=True,
+                indent=2,
+            )
+        )
+    else:
+        for result in outcome.results:
+            print(_probe_line(result))
+        print("Results: %s" % outcome.results_path)
+    return 1 if summary[EXPOSED] else 0
+
+
 def cmd_scan(args) -> int:
+    if _looks_local(args.target):
+        return _scan_target_path(args)
+
     try:
         target = normalize_target(args.target)
         token = _resolve_token(args)
@@ -200,11 +266,20 @@ def cmd_scan(args) -> int:
         )
         return 2
 
+    if args.json:
+        cause, message = _PROBE_INCONCLUSIVE
+        print(
+            json.dumps(
+                {"status": "unverified", "cause": cause, "message": message}
+            )
+        )
+        return 1
+
     return run_scan(proof)
 
 
 def run_scan(proof: OwnershipToken) -> int:
-    print("UNVERIFIED: PROBE_INCONCLUSIVE: probe suite not implemented")
+    print("UNVERIFIED: %s: %s" % _PROBE_INCONCLUSIVE)
     return 1
 
 

@@ -1,5 +1,7 @@
 """CLI and ownership gate tests (AT9-AT13)."""
 
+import json
+
 import pytest
 
 from pry.cli import main, run_scan
@@ -204,3 +206,34 @@ def test_scan_rejects_both_token_sources(tmp_path, capsys):
 def test_scan_missing_token_file_is_usage_error(tmp_path, capsys):
     assert main(["scan", TARGET, "--token-file", str(tmp_path / "nope")]) == 2
     assert "TOKEN_MALFORMED" in capsys.readouterr().out
+
+
+def test_scan_bare_host_is_treated_as_url_and_requires_token(capsys):
+    assert main(["scan", "example.com"]) == 2
+    assert "UNVERIFIED" in capsys.readouterr().out
+
+
+def test_scan_url_json_reports_unverified(capsys):
+    token = _token()
+
+    assert main(["scan", TARGET, "--token", token, "--json"]) == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "unverified",
+        "cause": "PROBE_INCONCLUSIVE",
+        "message": "probe suite not implemented",
+    }
+
+
+def test_scan_help_lists_local_scan_flags(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["scan", "--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    for flag in ("--json", "--out", "--timeout", "--port", "--token", "--level"):
+        assert flag in out
+
+
+def test_scan_rejects_non_integer_port():
+    with pytest.raises(SystemExit) as exc:
+        main(["scan", ".", "--port", "abc"])
+    assert exc.value.code == 2
