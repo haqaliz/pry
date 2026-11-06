@@ -1,6 +1,7 @@
 # PRD — Ownership Verification, For Real (P1)
 
-- **Status:** Approved (2026-11-07); implemented on `feat/ownership-verification-real/aliz`
+- **Status:** Merged to `master` (2026-11-07). The automated suite passes; the manual
+  owner-domain check remains.
 - **Owner:** aliz
 - **Date:** 2026-11-06
 - **Slug:** `ownership-verification-real`
