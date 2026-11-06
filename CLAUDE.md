@@ -16,9 +16,10 @@ data it should not have returned.
 The name: to *pry* something open is to force it, physically, to see whether it holds. Pry asks
 of an app: *does it actually hold, or does it give?*
 
-Status: **P1 ownership gate implemented; P2 onward not started.** The gate lives in
-`src/pry/own/` and is covered by offline tests. `pry scan` reports `UNVERIFIED` until the
-probe suite exists. Do not describe capability that isn't there yet.
+Status: **P1 ownership gate implemented; P2 local intake implemented; live URL intake and
+P3 onward not started.** The gate lives in `src/pry/own/`; the Docker sandbox in
+`src/pry/intake/`. `pry scan` reports `UNVERIFIED` until the probe suite exists. Do not
+describe capability that isn't there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed

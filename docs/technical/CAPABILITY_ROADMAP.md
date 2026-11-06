@@ -1,12 +1,12 @@
 # Pry: Capability Roadmap
 
 Engine capabilities in build order. Each lands test-first. P1 ownership gate implemented;
-P2 onward is not.
+P2 local intake implemented; live URL and P3 onward are not.
 
 | ID | Capability | Depends on | Guardrail tie-in |
 |---|---|---|---|
 | **P1** | **Ownership verification.** DNS TXT or well-known-file proof that the user controls the target (account linking deferred). Gates every level, including read-only. | none | Constraint 1 |
-| **P2** | **Target intake.** Local repo booted in an isolated sandbox (build first); a live URL once P1 covers it. Records a pinned snapshot of what was tested. | P1 | Sandbox before live |
+| **P2** | **Target intake.** Local repo booted in an isolated Docker sandbox (static + npm Node/Next first); records a pinned snapshot. Live URL intake deferred. | P1 | Sandbox before live |
 | **P3** | **Floor probe suite (read-only, always on).** Missing authentication, broken access control/IDOR, exposed secrets, exposed database/open rules, verbose error leakage, missing security headers/open CORS. | P1, P2 | Constraint 2, read-only default |
 | **P4** | **Intensity-gated probe suite.** Level 1: non-mutating SSRF probes, rate-limit probing. Level 2: write-based confirmation, sandbox/staging only by default, extra confirmation for a live target. | P3 | Constraints 2 and 6 |
 | **P5** | **Exploit proof capture and verdict.** `EXPOSED` / `NOT_REPRODUCED` / `UNVERIFIED`, each backed by a signed, redacted request/response record. | P3, P4 | Constraints 3, 4, 5 — the moat |
@@ -16,7 +16,8 @@ P2 onward is not.
 ## Sequencing
 
 P1 is hardened before any other code runs against a real target — not merely built first, but
-gating everything downstream. P2 and P3 follow, then P4 widens coverage behind explicit consent.
+gating everything downstream. P2 local intake is implemented; live URL intake and P3 follow,
+then P4 widens coverage behind explicit consent.
 P5 is the moat. P6 makes results publishable and reportable. P7 is business development, deferred.
 
 ## Open questions

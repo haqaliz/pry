@@ -43,3 +43,25 @@ def test_claude_status_is_honest():
     text = _read("CLAUDE.md")
     assert "day zero" not in text
     assert "P1 ownership gate implemented" in text
+
+
+def test_readme_p2_is_honest():
+    text = _read("README.md")
+    assert "P2 local intake implemented" in text
+    assert "Docker is required" in text
+    assert "not a kernel-level security boundary" in text
+
+
+def test_claude_p2_status():
+    text = _read("CLAUDE.md")
+    assert "P2 local intake implemented" in text
+
+
+def test_capability_roadmap_p2_status():
+    text = _read("docs/technical/CAPABILITY_ROADMAP.md")
+    assert "P2 local intake implemented" in text
+
+
+def test_architecture_p2_status():
+    text = _read("docs/technical/ARCHITECTURE.md")
+    assert "P2 local intake" in text

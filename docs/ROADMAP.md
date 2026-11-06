@@ -19,9 +19,10 @@ Milestone order is my proposal; reorder freely.
 | M0.3 | Local sandbox target intake (P2) | A local repo boots in an isolated sandbox for testing; no live target touched yet |
 
 Phase 0 status (2026-11-07): M0.1 done — DNS TXT and well-known-file verification work, and a
-target without proof cannot reach `scan`. M0.2 (`ETHICS.md`) is still open and must land before
-P3. M0.3 (P2 sandbox intake) is not started. The automated P1 suite is offline; the manual
-owner-domain check remains.
+target without proof cannot reach `scan`. M0.3 done for local repo intake — static and npm
+Node/Next projects boot in a Docker sandbox with a pinned snapshot; live URL intake is
+deferred. M0.2 (`ETHICS.md`) is still open and must land before P3. The automated P1/P2 suite
+is offline; the manual owner-domain check remains.
 
 ## Phase 1: OSS core, read-only (weeks 4-8)
 

@@ -12,9 +12,9 @@ the data it should not have returned.
 
 ## Status
 
-P1 ownership gate implemented. P2 target intake and P3 floor probes are not started. Until
-the probe suite exists, `pry scan` validates the ownership token and reports
-`UNVERIFIED: PROBE_INCONCLUSIVE` instead of implying a clean result.
+P1 ownership gate implemented. P2 local intake implemented. Live URL intake and P3 floor
+probes are not started. Until the probe suite exists, `pry scan` validates the ownership
+token and reports `UNVERIFIED: PROBE_INCONCLUSIVE` instead of implying a clean result.
 
 ## Ownership Verification (P1)
 
@@ -49,12 +49,41 @@ pry scan https://example.com --token <token>
 For the file method, use `--method well-known`. Well-known verification requires HTTPS,
 except for loopback test targets.
 
+## Local Sandbox Intake (P2)
+
+`pry intake` copies a local repository into a Docker sandbox, installs and builds it with
+network access, then runs it with no outbound network. Readiness is checked inside the
+container; no host port is published. The original repository is never mounted or modified.
+
+Supported in this slice: static sites (`index.html`) and npm-based Node/Next projects with
+a `start` or `dev` script. Python, yarn/pnpm, and live URL intake are deferred.
+
+```bash
+# Boot a local repo and write a pinned snapshot.
+pry intake ./my-app
+
+# Keep the container and workspace for debugging.
+pry intake ./my-app --keep
+
+# Machine-readable result.
+pry intake ./my-app --json
+```
+
+The snapshot is written to `~/.pry/runs/<id>/snapshot.json` (or `--out DIR`) beside capped
+`build.log` and `run.log` files. It records the git commit, dirty state, tree hash, lockfile
+hash, image digest, build/start commands, port, container id, and sandbox network mode.
+
+**Docker is required.** The sandbox is not a kernel-level security boundary: it contains
+accidents and ordinary build scripts, not a determined kernel attacker. Build scripts run
+third-party dependency code with network access; the run phase has no egress. There is no
+Docker socket and no host filesystem mount beyond the temporary copy.
+
 ## Architecture
 
 Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
-2. **INTAKE** (Target intake)
+2. **INTAKE** (Target intake) — P2 local sandbox implemented; live URL deferred
 3. **PROBE** (Security checks and exploitation)
 4. **PROVE** (Proof capture)
 5. **REPORT** (Findings presentation)
@@ -70,7 +99,7 @@ Pry's core architecture follows:
 
 ## Installation & Usage
 
-Requires Python 3.9+ and `uv`.
+Requires Python 3.9+, `uv`, and Docker for local intake.
 
 ```bash
 uv sync
@@ -87,8 +116,17 @@ pry verify-ownership https://example.com --method dns
 # After publishing the challenge, check it and print a token
 pry verify-ownership https://example.com --method dns --challenge <challenge>
 
-# Scan the verified target
+# Boot a local repo in the sandbox and write a snapshot
+pry intake ./my-app
+
+# Scan the verified target (probes are not implemented yet)
 pry scan https://example.com --token <token>
+```
+
+Docker integration tests are opt-in:
+
+```bash
+PRY_DOCKER_TESTS=1 uv run pytest -q -m docker
 ```
 
 ## Security Model
@@ -99,8 +137,11 @@ Pry implements a strict ownership gate with:
 2. HMAC-signed tokens bound to the normalized target origin, expiring after 24 hours.
 3. `scan` refusing an absent, malformed, tampered, expired, or wrong-target token before
    any target request.
-4. No probe suite yet, so a valid token leads to `UNVERIFIED`, never a success verdict.
-5. Absence of a reproduced finding is never reported as "secure".
+4. P2 local intake runs a temporary copy in Docker with no host socket, no host network
+   during the run phase, a non-root user, a read-only root, dropped capabilities, resource
+   limits, and guaranteed cleanup.
+5. No probe suite yet, so a valid token leads to `UNVERIFIED`, never a success verdict.
+6. Absence of a reproduced finding is never reported as "secure".
 
 ## Contributing
 
