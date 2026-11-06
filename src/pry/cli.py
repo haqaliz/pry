@@ -218,9 +218,43 @@ def cmd_intake(args) -> int:
             timeout=args.timeout,
         )
     except IntakeError as exc:
-        print("UNVERIFIED: %s: %s" % (exc.cause, exc.message))
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "cause": exc.cause,
+                        "message": exc.message,
+                    }
+                )
+            )
+        else:
+            print("UNVERIFIED: %s: %s" % (exc.cause, exc.message))
         return 1
-    print(result.snapshot_path)
+
+    if args.json:
+        payload = dict(result.snapshot)
+        payload["snapshot_path"] = str(result.snapshot_path)
+        print(json.dumps(payload, sort_keys=True, indent=2))
+        return 0
+
+    snapshot = result.snapshot
+    print("Sandbox ready: %s" % snapshot["sandbox_id"])
+    print(
+        "Target: %s (%s)"
+        % (snapshot["target"]["path"], snapshot["target"]["kind"])
+    )
+    print("Image: %s" % snapshot["project"]["image"])
+    print("Snapshot: %s" % result.snapshot_path)
+    if result.kept:
+        print("Container: %s (kept)" % result.container_id)
+        print("Workspace: %s (kept)" % result.workspace)
+        print(
+            "Clean up with: docker rm -f %s && rm -rf %s"
+            % (result.container_id, result.workspace)
+        )
+    else:
+        print("Container: %s (removed)" % result.container_id)
     return 0
 
 
