@@ -19,7 +19,7 @@ def new_challenge() -> str:
 
 
 def validate_challenge(challenge: str) -> None:
-    if not isinstance(challenge, str) or not _CHALLENGE_PATTERN.match(challenge):
+    if not isinstance(challenge, str) or not _CHALLENGE_PATTERN.fullmatch(challenge):
         raise OwnershipError(BAD_CHALLENGE, "challenge must be 32 URL-safe bytes")
 
 

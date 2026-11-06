@@ -31,7 +31,9 @@ def test_generated_challenge_is_valid():
     validate_challenge(new_challenge())
 
 
-@pytest.mark.parametrize("challenge", ["", "A" * 42, "A" * 44, "!" * 43])
+@pytest.mark.parametrize(
+    "challenge", ["", "A" * 42, "A" * 44, "!" * 43, "A" * 43 + "\n"]
+)
 def test_invalid_challenges_are_rejected(challenge):
     with pytest.raises(OwnershipError) as exc:
         validate_challenge(challenge)
