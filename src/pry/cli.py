@@ -22,6 +22,7 @@ from pry.own.target import Target, normalize_target
 from pry.own.tokens import TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
+from pry.probe.idor import load_idor_config
 from pry.probe.live import scan_live
 from pry.probe.scan import scan_local, validate_endpoints
 from pry.proof import ProofError, load_bundle, verify_bundle
@@ -85,6 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PATH",
         help="Declared-protected path to GET without credentials (repeatable)",
+    )
+    scan.add_argument(
+        "--idor-config",
+        metavar="FILE",
+        help="0600 JSON config with two identities and two object paths (live only)",
     )
     scan.add_argument(
         "--report",
@@ -337,6 +343,15 @@ def _probe_line(result: ProbeResult) -> str:
 
 
 def _scan_target_path(args) -> int:
+    if args.idor_config:
+        _print_error(
+            ProbeError(
+                "IDOR_REQUIRES_LIVE",
+                "configured IDOR checks are live-only; pass a URL with --token",
+            )
+        )
+        return 2
+
     if args.level != 0:
         _print_error(
             OwnershipError(INTENSITY_INSUFFICIENT, "only level 0 is implemented")
@@ -377,12 +392,21 @@ def _scan_target_url(args) -> int:
         token = _resolve_token(args)
         TokenSigner().validate(token, target)
         endpoints = validate_endpoints(args.endpoint)
+        idor_config = (
+            load_idor_config(args.idor_config) if args.idor_config else None
+        )
     except (OwnershipError, ProbeError) as exc:
         _print_error(exc, args.json)
         return 2
 
     try:
-        outcome = scan_live(args.target, token, endpoints=endpoints, out=args.out)
+        outcome = scan_live(
+            args.target,
+            token,
+            endpoints=endpoints,
+            out=args.out,
+            idor_config=idor_config,
+        )
     except (OwnershipError, IntakeError, ProbeError, ProofError) as exc:
         _print_error(exc, args.json)
         return 2

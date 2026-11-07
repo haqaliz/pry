@@ -12,6 +12,7 @@ import pry.probe.live as live
 from pry.own.errors import OwnershipError
 from pry.own.target import normalize_target
 from pry.own.tokens import TokenSigner
+from pry.probe.idor import IdorConfig
 from pry.probe.results import (
     EXPOSED,
     NOT_REPRODUCED,
@@ -22,6 +23,7 @@ from pry.probe.results import (
 )
 from pry.probe.scan import ScanOutcome
 from pry.proof import load_bundle, verify_bundle
+from pry.report import write_report
 from pry.report.corpus import read_findings
 
 ORIGIN = "https://app.example.com"
@@ -50,6 +52,15 @@ def corpus_file(tmp_path):
 
 def _token(target=ORIGIN, proof="dns_txt"):
     return TokenSigner().issue(normalize_target(target), proof)
+
+
+def _idor_config():
+    return IdorConfig(
+        headers_a={"Cookie": "sid=alice"},
+        headers_b={"Cookie": "sid=bob"},
+        object_a="/api/orders/1",
+        object_b="/api/orders/2",
+    )
 
 
 def _payload(probe, verdict=NOT_REPRODUCED, url=ORIGIN + "/"):
@@ -81,7 +92,13 @@ class Sentinel:
 @pytest.fixture
 def sentinel(monkeypatch):
     guard = Sentinel()
-    for name in ("probe_cors", "probe_errors", "probe_secrets", "probe_unauth"):
+    for name in (
+        "probe_cors",
+        "probe_errors",
+        "probe_secrets",
+        "probe_unauth",
+        "probe_idor",
+    ):
         monkeypatch.setattr(live, name, guard)
     return guard
 
@@ -266,6 +283,95 @@ def test_scan_live_runs_unauth_for_each_declared_endpoint(tmp_path, fake_probes)
         "unauth",
     ]
     assert outcome.summary == {EXPOSED: 3, NOT_REPRODUCED: 1, UNVERIFIED: 1}
+
+
+def test_scan_live_appends_the_configured_idor_result(
+    tmp_path, fake_probes, monkeypatch
+):
+    calls = []
+
+    def idor(base_url, config):
+        calls.append((base_url, config))
+        return _payload("idor", EXPOSED, base_url + config.object_b)
+
+    monkeypatch.setattr(live, "probe_idor", idor)
+    config = _idor_config()
+    run_dir = tmp_path / "run"
+
+    outcome = live.scan_live(
+        ORIGIN,
+        _token(),
+        endpoints=["/api/users"],
+        idor_config=config,
+        out=run_dir,
+    )
+
+    assert calls == [(ORIGIN, config)]
+    assert [result.probe for result in outcome.results] == [
+        "cors",
+        "errors",
+        "secrets",
+        "unauth",
+        "idor",
+    ]
+    idor_result = outcome.results[-1]
+    assert idor_result.verdict == EXPOSED
+    assert idor_result.proof is not None
+    payload, _fingerprint = verify_bundle(load_bundle(idor_result.proof))
+    assert payload["finding"]["probe"] == "idor"
+    assert payload["finding"]["verdict"] == EXPOSED
+    data = json.loads(outcome.results_path.read_text(encoding="utf-8"))
+    assert data["results"][-1]["probe"] == "idor"
+    assert outcome.summary == summarize(outcome.results)
+    assert outcome.summary[EXPOSED] == 3
+
+
+def test_scan_live_report_includes_the_idor_result(
+    tmp_path, fake_probes, monkeypatch
+):
+    monkeypatch.setattr(
+        live,
+        "probe_idor",
+        lambda base_url, config: _payload(
+            "idor", NOT_REPRODUCED, base_url + config.object_b
+        ),
+    )
+
+    outcome = live.scan_live(
+        ORIGIN, _token(), idor_config=_idor_config(), out=tmp_path / "run"
+    )
+    report_path = write_report(Path(outcome.results_path).parent)
+    rendered = report_path.read_text(encoding="utf-8")
+
+    assert "idor" in rendered
+    assert "NOT_REPRODUCED" in rendered
+
+
+def test_scan_live_without_an_idor_config_does_not_run_it(
+    tmp_path, fake_probes, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        live, "probe_idor", lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+
+    outcome = live.scan_live(ORIGIN, _token(), out=tmp_path / "run")
+
+    assert calls == []
+    assert [result.probe for result in outcome.results] == list(PROBES)
+
+
+def test_scan_live_validates_the_token_before_the_idor_probe(tmp_path, sentinel):
+    with pytest.raises(OwnershipError):
+        live.scan_live(
+            ORIGIN,
+            "garbage",
+            idor_config=_idor_config(),
+            out=tmp_path / "run",
+        )
+
+    assert sentinel.calls == []
+    assert not (tmp_path / "run").exists()
 
 
 def test_scan_live_appends_one_corpus_record_per_finding(

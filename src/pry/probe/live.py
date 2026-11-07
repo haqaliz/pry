@@ -10,6 +10,7 @@ from pathlib import Path
 from pry.intake.snapshot import new_run_dir, utc_now, write_snapshot
 from pry.own.target import normalize_target
 from pry.own.tokens import TokenSigner
+from pry.probe.idor import probe_idor
 from pry.probe.results import ProbeResult
 from pry.probe.scan import (
     SCAN_VERSION,
@@ -62,7 +63,7 @@ def _snapshot(target, sandbox_id, created_at, proof_type):
     }
 
 
-def _run_probes(origin, endpoints):
+def _run_probes(origin, endpoints, idor_config=None):
     results = [
         ProbeResult(**probe_cors(origin)),
         ProbeResult(**probe_errors(origin)),
@@ -71,10 +72,12 @@ def _run_probes(origin, endpoints):
     results.extend(
         ProbeResult(**probe_unauth(origin, path)) for path in endpoints
     )
+    if idor_config is not None:
+        results.append(ProbeResult(**probe_idor(origin, idor_config)))
     return results
 
 
-def scan_live(url, token, *, endpoints=None, out=None):
+def scan_live(url, token, *, endpoints=None, out=None, idor_config=None):
     """Prove ownership of ``url``, run the read-only probes, finalize."""
     target = normalize_target(url)
     proof = TokenSigner().validate(token, target)
@@ -88,7 +91,7 @@ def scan_live(url, token, *, endpoints=None, out=None):
     snapshot = _snapshot(target, sandbox_id, utc_now(), proof.proof_type)
     write_snapshot(run_dir, snapshot)
 
-    results = _run_probes(target.origin, endpoints)
+    results = _run_probes(target.origin, endpoints, idor_config)
     results, summary, results_path, corpus_error = finalize_results(
         run_dir, snapshot, results
     )
