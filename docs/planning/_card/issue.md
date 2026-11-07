@@ -1,73 +1,67 @@
-# Floor Probes, For Real (P3)
+# Unauthenticated Endpoints, For Real (P3 remainder)
 
 - **Type:** feat
-- **Slug:** `floor-probes-real`
+- **Slug:** `unauthenticated-endpoints`
 - **Owner:** aliz
-- **Source:** inline brief. No GitHub issue for this slug.
-- **Capability:** P3 — floor probes. Depends on P1, P2, and `ETHICS.md`.
+- **Source:** inline brief. No GitHub issue.
+- **Capability:** P3 remainder — missing authentication. Depends on P1, P2, the P3 probe
+  sidecar, and `ETHICS.md`.
 
 ## Brief
 
-Implement the first read-only floor probes that actually reproduce an issue and save the
-request/response pair. This slice covers three mechanical classes: CORS with credentials,
-verbose error leakage, and exposed secret files. Missing authentication, IDOR/broken access
-control, and exposed database rules need endpoint/identity models and are deferred.
+Prove that an endpoint the owner says is protected returns data without an authentication
+header. Endpoint discovery is the hard part, so the first slice requires the owner to
+declare the paths. That makes the claim precise: "you said `/api/users` requires auth; here
+is a 200 JSON response with no credentials."
 
-The probes run inside the sandbox. P2's run container uses `--network=none`, so the host
-cannot reach the app. P3 replaces that with a per-run Docker `--internal` network, the app
-on it with an alias, and a Python probe sidecar on the same network. The host runs probes
-via `docker exec` into the sidecar. No host port, no egress.
+The probe runs inside the existing sidecar against the sandboxed app. GET only, no cookies,
+no auth header, no egress. A 2xx JSON/non-empty body is `EXPOSED`; 401/403/404, a redirect,
+or a 2xx HTML/login page is `NOT_REPRODUCED`; 5xx or transport failure is `UNVERIFIED`.
 
 ## Current state
 
-- P1 ownership gate and P2 local intake are merged.
-- No `src/pry/probe/` exists.
-- `pry scan` requires an ownership token and always reports `UNVERIFIED`.
-- `ETHICS.md` is a draft in this branch and must be approved before probe code lands.
-- The old `feat-target-intake-aliz` mock is not a dependency.
+- P1, P2, and the first P3 slice (CORS, verbose errors, exposed secret files) are merged.
+- `pry scan ./app` runs the three probes in `src/pry/probe/sidecar.py`.
+- There is no endpoint flag and no unauthenticated request probe.
+- `ETHICS.md` is approved.
 
 ## Scope
 
-1. `pry scan ./path` for local directories: boot the P2 sandbox, run the probes, write
-   results, clean up. No P1 token for local files. URLs keep the P1 gate and remain
-   `UNVERIFIED` because live probes are not implemented.
-2. Probe sidecar on an internal Docker network; no egress from app or sidecar.
-3. Probe 1: CORS with credentials. `EXPOSED` only when the response reflects the attacker
-   origin and allows credentials; `*` + credentials is `NOT_REPRODUCED`.
-4. Probe 2: verbose error leakage. One safe GET to a random path with a quoted parameter;
-   `EXPOSED` only on strong stack-trace/framework/SQL signatures.
-5. Probe 3: exposed secret files. Fixed sensitive paths; `EXPOSED` only on a 200 response
-   with a secret signature. Redact values; show the key name.
-6. Result model with the captured request/response, verdict, and cause; `results.json` in
-   the run dir; `--json` CLI output.
-7. Offline unit tests with fake sidecar responses; opt-in Docker integration on vulnerable
-   and safe fixtures.
-8. Update P2 docs/tests for the network-mode change.
+1. `pry scan ./app --endpoint /api/users --endpoint /api/admin` (repeatable).
+2. Path-only validation: must start with `/`, must not contain `://`, whitespace, or a
+   protocol-relative prefix. Reject absolute URLs; the probe only talks to the sandbox app.
+3. Sidecar probe `unauth`: GET the path with no auth/cookie headers; no redirects; 5s
+   timeout; 4 KiB body cap.
+4. Verdict rules: 2xx + JSON content type or a JSON-looking body + non-empty → `EXPOSED`;
+   401/403/404 → `NOT_REPRODUCED`; 2xx HTML (likely a login page) → `NOT_REPRODUCED`;
+   5xx/transport → `UNVERIFIED`.
+5. One result per endpoint, with request/response and evidence; append to `results.json`.
+6. No `--endpoint` → the check is not run; the default three probes are unchanged.
+7. Tests: sidecar, client, scan, CLI, and an opt-in Docker fixture with a 200 JSON endpoint
+   and a 401 endpoint.
 
 ## Out of scope
 
-- Missing authentication, IDOR/broken access control, exposed database/open rules.
-- Security-header-only findings (not an exploit; no `EXPOSED`).
-- Live URL intake/probing, intensity levels 1–2, write-based checks.
-- Signed/replayable proof bundles (P5), corpus/report (P6).
-- Any claim that a clean result means secure.
+- Endpoint discovery (OpenAPI, crawling, JS parsing).
+- Authenticated/IDOR checks, exposed database rules, header-only findings.
+- Live URL probing, levels 1–2.
+- Claims that the app has "no authentication" beyond the declared endpoints.
 
 ## Acceptance criteria (draft)
 
-- Vulnerable fixture: `pry scan` returns `EXPOSED` for all three probes, each with a
-  redacted request/response and a matching evidence string.
-- Safe fixture: all three return `NOT_REPRODUCED`, exit 0, never `EXPOSED`.
-- CORS `*` without credentials → `NOT_REPRODUCED`.
-- A generic 404 → `NOT_REPRODUCED`; a stack trace/SQL error → `EXPOSED`.
-- A 404 `/.env` → `NOT_REPRODUCED`; a 200 `/.env` with a secret → `EXPOSED`, value redacted.
-- App and sidecar have no egress; external requests fail.
-- The sandbox, sidecar, network, and workspace are removed on success and failure.
-- The host repo is unchanged.
-- Default suite offline; Docker tests opt-in with `PRY_DOCKER_TESTS=1`.
-- `ETHICS.md` approved before probe code lands.
+- `--endpoint /api/users` against a 200 JSON fixture → `EXPOSED`, result has the request
+  (no Authorization/Cookie) and response (status 200, JSON excerpt).
+- `--endpoint /api/private` against a 401 fixture → `NOT_REPRODUCED`.
+- 2xx HTML login page → `NOT_REPRODUCED`.
+- 500 → `UNVERIFIED`.
+- Absolute URL / `//evil` / whitespace path → exit 2, no request.
+- No `--endpoint` → exactly the existing three results.
+- App/sidecar no egress; cleanup; host repo unchanged.
+- Default suite offline; Docker test opt-in.
 
 ## Notes
 
-- P3 changes P2's run network from `--network=none` to an `--internal` network so the
-  sidecar can reach the app. The app still has no egress. P2 tests/docs must be updated.
-- The signed proof bundle is P5; P3 captures a local, redacted, replayable pair.
+- The endpoint list is a declaration by the owner. The result is "this declared-protected
+  path returned data without credentials," not "the whole app has no auth."
+- This is the highest-value remaining floor check for the vibe-coded market (apps with no
+  authentication at all); P4 expanded checks come after the floor suite.
