@@ -104,7 +104,12 @@ _SECRET = re.compile(
     r"(?:SECRET|PASSWORD|PASSWD|PRIVATE_KEY|ACCESS_KEY|API_KEY|AUTH_TOKEN"
     r"|DATABASE_URL|DB_URL|CONNECTION_STRING|DSN|CREDENTIALS)"
     r"[A-Za-z0-9_.-]*)"
-    r"\s*[=:]\s*[\"']?(?P<value>[^\s\"',}]+)"
+    r"(?P<sep>\s*[=:]\s*[\"']?)(?P<value>[^\s\"',}]+)"
+)
+_PRIVATE_KEY_BLOCK = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?"
+    r"(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)",
+    re.S,
 )
 _PLACEHOLDERS = frozenset(
     (
@@ -233,15 +238,17 @@ def _same_origin(base_url: str, url: str) -> bool:
     return _origin(base_url) == _origin(url)
 
 
-def _redact_secret(text: str, key: str) -> str:
-    pattern = re.compile(
-        r"(?im)^([^\n]*?\b%s\b[^\n]*?[=:][ \t]*)([^\n]*)$" % re.escape(key)
-    )
-    return pattern.sub(lambda match: match.group(1) + "[redacted]", text)
-
-
 def _redact_urls(text: str) -> str:
     return _URL_USERINFO.sub(r"\1[redacted]@", text)
+
+
+def _redact_all_secrets(text: str) -> str:
+    def replace(match):
+        return match.group("key") + match.group("sep") + "[redacted]"
+
+    text = _SECRET.sub(replace, text)
+    text = _PRIVATE_KEY_BLOCK.sub("[redacted private key]", text)
+    return _redact_urls(text)
 
 
 def _is_secret_value(value: str) -> bool:
@@ -359,7 +366,7 @@ def probe_secrets(base_url: str, fetch=None) -> dict:
             response = Response(
                 response.status,
                 response.headers,
-                _redact_urls(_redact_secret(response.body, match.group("key"))),
+                _redact_all_secrets(response.body),
                 response.final_url,
             )
         if first_response is None:

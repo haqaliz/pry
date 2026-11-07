@@ -238,6 +238,24 @@ def test_secrets_env_with_a_secret_is_exposed_and_redacted():
     assert len(fetch.calls) == 1
 
 
+def test_secrets_redacts_every_secret_in_the_body():
+    body = (
+        "DATABASE_URL=postgres://user:pass@db.local/app\n"
+        "SECRET_KEY=supersecretvalue123\n"
+        "APP_ENV=production\n"
+    )
+    fetch = FakeFetch(_response(200, {}, body, "/.env"))
+
+    result = sidecar.probe_secrets(BASE, fetch=fetch)
+
+    out = result["response"]["body"]
+    assert result["verdict"] == sidecar.EXPOSED
+    assert "supersecretvalue123" not in out
+    assert "user:pass" not in out
+    assert "SECRET_KEY=[redacted]" in out
+    assert "APP_ENV=production" in out
+
+
 def test_secrets_env_404_is_not_reproduced():
     fetch = FakeFetch(*_all(404))
 
