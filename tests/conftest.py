@@ -11,6 +11,11 @@ _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 @pytest.fixture(autouse=True)
+def isolated_corpus(tmp_path, monkeypatch):
+    monkeypatch.setenv("PRY_CORPUS", str(tmp_path / "corpus.jsonl"))
+
+
+@pytest.fixture(autouse=True)
 def block_real_network(monkeypatch):
     real_connect = socket.socket.connect
 

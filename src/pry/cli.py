@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import List, Optional
@@ -23,6 +24,7 @@ from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
 from pry.probe.scan import scan_local, validate_endpoints
 from pry.proof import ProofError, load_bundle, verify_bundle
+from pry.report import ReportError, load_run, write_report
 
 _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHOD}
 _PROBE_INCONCLUSIVE = ("PROBE_INCONCLUSIVE", "probe suite not implemented")
@@ -83,6 +85,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PATH",
         help="Declared-protected path to GET without credentials (repeatable)",
+    )
+    scan.add_argument(
+        "--report",
+        action="store_true",
+        help="Write an HTML findings report after a local scan",
+    )
+
+    report = subparsers.add_parser(
+        "report", help="Generate a local HTML report from a run directory"
+    )
+    report.add_argument("run_dir", help="Run directory from a local scan")
+    report.add_argument(
+        "--out", help="Report path (default: RUN_DIR/report.html)"
+    )
+    report.add_argument(
+        "--json", action="store_true", help="Print JSON metadata"
     )
 
     verify_proof = subparsers.add_parser(
@@ -259,6 +277,52 @@ def cmd_verify_proof(args) -> int:
     return 0
 
 
+def cmd_report(args) -> int:
+    try:
+        report = load_run(args.run_dir)
+        path = write_report(args.run_dir, out=args.out)
+    except ReportError as exc:
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "cause": exc.cause,
+                        "message": exc.message,
+                    }
+                )
+            )
+        else:
+            print(str(exc))
+        return 1
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "run_dir": str(Path(args.run_dir).expanduser()),
+                    "report": str(path),
+                    "snapshot_id": report.snapshot_id,
+                    "counts": report.counts,
+                    "findings": [
+                        {
+                            "probe": finding.probe,
+                            "verdict": finding.verdict,
+                            "proof_status": finding.proof_status,
+                            "fingerprint": finding.fingerprint,
+                        }
+                        for finding in report.findings
+                    ],
+                },
+                sort_keys=True,
+                indent=2,
+            )
+        )
+    else:
+        print("Report: %s" % path)
+    return 0
+
+
 def _looks_local(value: str) -> bool:
     """A URL always has a scheme; otherwise a directory or path-like string is local."""
     if "://" in value:
@@ -298,23 +362,36 @@ def _scan_target_path(args) -> int:
         return 2
 
     summary = summarize(outcome.results)
-    if args.json:
+    if outcome.corpus_error:
         print(
-            json.dumps(
-                {
-                    "snapshot": outcome.snapshot,
-                    "results": [asdict(result) for result in outcome.results],
-                    "summary": summary,
-                    "results_path": str(outcome.results_path),
-                },
-                sort_keys=True,
-                indent=2,
-            )
+            "Warning: corpus not written: %s" % outcome.corpus_error,
+            file=sys.stderr,
         )
+
+    report_path = None
+    if args.report:
+        try:
+            report_path = write_report(Path(outcome.results_path).parent)
+        except ReportError as exc:
+            print(str(exc))
+            return 2
+
+    if args.json:
+        data = {
+            "snapshot": outcome.snapshot,
+            "results": [asdict(result) for result in outcome.results],
+            "summary": summary,
+            "results_path": str(outcome.results_path),
+        }
+        if report_path is not None:
+            data["report"] = str(report_path)
+        print(json.dumps(data, sort_keys=True, indent=2))
     else:
         for result in outcome.results:
             print(_probe_line(result))
         print("Results: %s" % outcome.results_path)
+        if report_path is not None:
+            print("Report: %s" % report_path)
     return 1 if summary[EXPOSED] else 0
 
 
@@ -415,6 +492,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_verify(args)
     if args.command == "verify-proof":
         return cmd_verify_proof(args)
+    if args.command == "report":
+        return cmd_report(args)
     if args.command == "intake":
         return cmd_intake(args)
     return cmd_scan(args)

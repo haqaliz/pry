@@ -3,6 +3,7 @@
 import secrets
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from typing import Optional
 
 from pry.intake import SandboxHandle, intake
 from pry.intake.docker import DockerRunner
@@ -22,8 +23,11 @@ from pry.proof import (
     ProofError,
     ProofSigner,
     build_bundle,
+    load_bundle,
+    verify_bundle,
     write_bundle,
 )
+from pry.report.corpus import ReportError, append_findings
 
 SCAN_VERSION = 1
 ENDPOINT_LIMIT = 2048
@@ -36,6 +40,7 @@ class ScanOutcome:
     results: list
     results_path: Path
     summary: dict
+    corpus_error: Optional[str] = None
 
 
 def sidecar_script_path() -> Path:
@@ -101,6 +106,34 @@ def _finding(result: ProbeResult) -> dict:
     }
 
 
+def _fingerprint(proof):
+    if not proof:
+        return None
+    try:
+        _payload, fingerprint = verify_bundle(load_bundle(proof))
+    except ProofError:
+        return None
+    return fingerprint
+
+
+def _corpus_records(snapshot, results, created_at):
+    target = snapshot["target"]
+    return [
+        {
+            "created_at": created_at,
+            "sandbox_id": snapshot["sandbox_id"],
+            "target": target["path"],
+            "kind": target["kind"],
+            "probe": result.probe,
+            "verdict": result.verdict,
+            "cause": result.cause,
+            "proof": result.proof,
+            "fingerprint": _fingerprint(result.proof),
+        }
+        for result in results
+    ]
+
+
 def _sign_exposed(run_dir, snapshot, results):
     """Write one bundle per EXPOSED result and attach its path."""
     if not any(result.verdict == EXPOSED for result in results):
@@ -131,6 +164,7 @@ def scan_local(
     runner = docker if docker is not None else DockerRunner()
     network = "pry-net-" + secrets.token_hex(6)
     results = []
+    corpus_error = None
 
     def on_ready(handle: SandboxHandle) -> None:
         sidecar = "pry-probe-" + handle.sandbox_id
@@ -180,6 +214,14 @@ def scan_local(
             created_at=utc_now(),
         )
         results_path = write_results(run_dir, asdict(scan_result))
+        try:
+            append_findings(
+                _corpus_records(
+                    intake_result.snapshot, results, scan_result.created_at
+                )
+            )
+        except ReportError as exc:
+            corpus_error = str(exc)
     except BaseException as exc:
         failure = exc
         raise
@@ -195,4 +237,5 @@ def scan_local(
         results=results,
         results_path=results_path,
         summary=summary,
+        corpus_error=corpus_error,
     )

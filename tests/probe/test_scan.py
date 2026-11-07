@@ -35,6 +35,7 @@ from pry.proof import (
     load_bundle,
     verify_bundle,
 )
+from pry.report.corpus import REPORT_FAILED, ReportError, read_findings
 
 SANDBOX_ID = "pry-0123456789ab"
 SIDECAR = "pry-probe-" + SANDBOX_ID
@@ -184,6 +185,13 @@ def repo(tmp_path):
 def proof_key(tmp_path, monkeypatch):
     path = tmp_path / "proof.key"
     monkeypatch.setenv("PRY_PROOF_KEY", str(path))
+    return path
+
+
+@pytest.fixture(autouse=True)
+def corpus_file(tmp_path, monkeypatch):
+    path = tmp_path / "corpus.jsonl"
+    monkeypatch.setenv("PRY_CORPUS", str(path))
     return path
 
 
@@ -656,3 +664,86 @@ def test_signing_failure_is_proof_failed_and_writes_no_results(
     assert docker.sidecars == []
     assert docker.networks == []
     assert proof_key.read_bytes() == b"short"
+
+
+def test_scan_appends_one_corpus_record_per_finding(
+    repo, tmp_path, monkeypatch, corpus_file
+):
+    outcome, _ = _scan_with_verdicts(
+        repo,
+        tmp_path,
+        monkeypatch,
+        {"cors": EXPOSED, "errors": NOT_REPRODUCED, "secrets": EXPOSED},
+    )
+
+    records = read_findings()
+
+    assert outcome.corpus_error is None
+    assert [record["probe"] for record in records] == [
+        "cors",
+        "errors",
+        "secrets",
+    ]
+    assert [record["verdict"] for record in records] == [
+        EXPOSED,
+        NOT_REPRODUCED,
+        EXPOSED,
+    ]
+    for record in records:
+        assert set(record) == {
+            "created_at",
+            "sandbox_id",
+            "target",
+            "kind",
+            "probe",
+            "verdict",
+            "cause",
+            "proof",
+            "fingerprint",
+        }
+        assert record["sandbox_id"] == SANDBOX_ID
+        assert record["target"] == "/repo"
+        assert record["kind"] == "static"
+        assert record["created_at"].endswith("Z")
+    exposed = [record for record in records if record["verdict"] == EXPOSED]
+    assert all(Path(record["proof"]).is_file() for record in exposed)
+    fingerprints = set()
+    for record in exposed:
+        payload, fingerprint = verify_bundle(load_bundle(record["proof"]))
+        assert payload["finding"]["verdict"] == EXPOSED
+        assert record["fingerprint"] == fingerprint
+        fingerprints.add(fingerprint)
+    assert len(fingerprints) == 1
+    assert all(
+        record["proof"] is None and record["fingerprint"] is None
+        for record in records
+        if record["verdict"] != EXPOSED
+    )
+    assert stat.S_IMODE(corpus_file.stat().st_mode) == 0o600
+
+
+def test_a_corpus_failure_warns_without_failing_the_scan(
+    repo, tmp_path, monkeypatch
+):
+    def fail(records):
+        raise ReportError(REPORT_FAILED, "cannot append corpus: denied")
+
+    monkeypatch.setattr(scan, "append_findings", fail)
+
+    outcome, _ = _scan_with_verdicts(
+        repo,
+        tmp_path,
+        monkeypatch,
+        {"cors": EXPOSED, "errors": NOT_REPRODUCED, "secrets": NOT_REPRODUCED},
+    )
+
+    assert outcome.corpus_error == (
+        "REPORT_FAILED: cannot append corpus: denied"
+    )
+    assert outcome.results_path.exists()
+    assert len(outcome.results) == 3
+    assert outcome.summary == {
+        EXPOSED: 1,
+        NOT_REPRODUCED: 2,
+        UNVERIFIED: 0,
+    }
