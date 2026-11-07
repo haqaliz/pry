@@ -65,3 +65,34 @@ def test_capability_roadmap_p2_status():
 def test_architecture_p2_status():
     text = _read("docs/technical/ARCHITECTURE.md")
     assert "P2 local intake" in text
+
+
+def test_ethics_gate_exists():
+    text = _read("ETHICS.md")
+    assert "EXPOSED" in text
+    assert "NOT_REPRODUCED" in text
+    assert "UNVERIFIED" in text
+    assert "SAFE" in text
+    assert "SECURE" in text
+
+
+def test_readme_p3_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "P3 read-only floor probes implemented" in text
+    assert "ETHICS.md" in text
+    assert "Missing authentication" in text
+
+
+def test_claude_p3_status():
+    text = " ".join(_read("CLAUDE.md").split())
+    assert "P3 read-only probes implemented" in text
+
+
+def test_capability_roadmap_p3_status():
+    text = _read("docs/technical/CAPABILITY_ROADMAP.md")
+    assert "P3 read-only probe slice implemented" in text
+
+
+def test_architecture_p3_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
+    assert "P3 read-only probes are implemented" in text

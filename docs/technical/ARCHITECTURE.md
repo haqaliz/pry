@@ -1,7 +1,8 @@
 # Pry: Architecture
 
-Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; live
-URL intake and P3 onward are design intent.
+Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; P3
+read-only probes are implemented; live URL intake, authenticated probes, and P4 onward are
+design intent.
 
 ## Pipeline
 
@@ -32,9 +33,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probes/
-    floor/    P3: the always-on read-only checks
-    gated/    P4: level 1 and level 2 checks, confirmation flow
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets); P4 adds gated checks
   proof/      P5: request/response capture, redaction, signing
   corpus/     P6: findings store, report generator
   cli/        pry scan | verify-ownership | report
@@ -48,6 +47,9 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Local intake is a copied tree in Docker.** Only a temporary copy is mounted; the run
   container has no egress, no host socket, a non-root user, and resource limits. The snapshot
   pins what ran.
+- **Probes run from a sidecar on an internal network.** The app and the sidecar share a
+  per-run Docker `--internal` network; the host runs the probes through `docker exec`. Neither
+  container has egress. Secrets are redacted inside the sidecar before the host sees them.
 - **Floor probes are read-only by construction.** Each floor check's implementation is reviewed
   for side effects (a GET that happens to trigger a webhook is not "read-only").
 - **Confirmation is explicit and per-target.** Raising intensity requires a fresh confirmation for

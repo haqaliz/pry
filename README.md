@@ -12,9 +12,11 @@ the data it should not have returned.
 
 ## Status
 
-P1 ownership gate implemented. P2 local intake implemented. Live URL intake and P3 floor
-probes are not started. Until the probe suite exists, `pry scan` validates the ownership
-token and reports `UNVERIFIED: PROBE_INCONCLUSIVE` instead of implying a clean result.
+P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor probes
+implemented (first slice): CORS with credentials, verbose error leakage, and exposed secret
+files. Missing authentication, IDOR/access control, exposed database rules, live URL intake,
+and intensity levels 1–2 are not started. A clean P3 result is `NOT_REPRODUCED`, never
+"secure."
 
 ## Ownership Verification (P1)
 
@@ -78,13 +80,42 @@ accidents and ordinary build scripts, not a determined kernel attacker. Build sc
 third-party dependency code with network access; the run phase has no egress. There is no
 Docker socket and no host filesystem mount beyond the temporary copy.
 
+## Read-Only Floor Probes (P3)
+
+`pry scan ./my-app` boots the local repo in the sandbox, runs the read-only floor probes,
+writes `results.json` beside the snapshot, and cleans up. A local path needs no ownership
+token: the user already has the files. A URL still requires the P1 token and remains
+`UNVERIFIED` because live probing is not implemented.
+
+The first slice checks three mechanical classes:
+
+1. **CORS with credentials** — the response reflects `https://pry.invalid` and sets
+   `Access-Control-Allow-Credentials: true`. `*` plus credentials is not reported as EXPOSED.
+2. **Verbose error leakage** — a safe missing-path request returns a stack trace, framework
+   debug page, or SQL error.
+3. **Exposed secret files** — a fixed sensitive path returns a file containing a secret.
+   Values are redacted before they leave the sidecar.
+
+Each `EXPOSED` carries the request/response pair and a short evidence string. Missing
+authentication, IDOR/broken access control, exposed database rules, and header-only findings
+are deferred. See [`ETHICS.md`](ETHICS.md) for what an exposure does and does not assert.
+
+```bash
+pry scan ./my-app
+pry scan ./my-app --json
+```
+
+The app and the probe sidecar share a per-run Docker internal network with no egress. The
+host runs probes through `docker exec` into the sidecar; no host port is published. Exit
+codes: 0 for no EXPOSED, 1 for any EXPOSED, 2 for usage/sandbox errors.
+
 ## Architecture
 
 Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live URL deferred
-3. **PROBE** (Security checks and exploitation)
+3. **PROBE** (Security checks and exploitation) — P3 read-only first slice implemented
 4. **PROVE** (Proof capture)
 5. **REPORT** (Findings presentation)
 
@@ -119,7 +150,10 @@ pry verify-ownership https://example.com --method dns --challenge <challenge>
 # Boot a local repo in the sandbox and write a snapshot
 pry intake ./my-app
 
-# Scan the verified target (probes are not implemented yet)
+# Scan a local repo with the read-only floor probes
+pry scan ./my-app
+
+# Scan a verified URL (live probes are not implemented yet)
 pry scan https://example.com --token <token>
 ```
 
@@ -140,8 +174,10 @@ Pry implements a strict ownership gate with:
 4. P2 local intake runs a temporary copy in Docker with no host socket, no host network
    during the run phase, a non-root user, a read-only root, dropped capabilities, resource
    limits, and guaranteed cleanup.
-5. No probe suite yet, so a valid token leads to `UNVERIFIED`, never a success verdict.
-6. Absence of a reproduced finding is never reported as "secure".
+5. P3 local scans run read-only probes in an internal network with no egress; the sidecar
+   redacts secret values before the host sees them.
+6. Live URL scans still lead to `UNVERIFIED`, never a success verdict.
+7. Absence of a reproduced finding is never reported as "secure".
 
 ## Contributing
 

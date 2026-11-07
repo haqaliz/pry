@@ -33,6 +33,12 @@ is offline; the manual owner-domain check remains.
 | M1.3 | `pry scan <target>` CLI | Level 0 only; exit code reflects verdict; JSON output byte-stable |
 | M1.4 | First real finding on an app you own | Published as a case study, with ETHICS.md's disclosure process followed |
 
+Phase 1 status (2026-11-07): M1.1 partial — CORS with credentials, verbose error leakage, and
+exposed secret files are implemented for local repos. Missing auth, IDOR/access control,
+exposed database rules, and header-only checks are not. M1.3 local `pry scan` works; URL scans
+remain `UNVERIFIED`. M1.2 captures a redacted request/response pair, but the signed bundle is
+P5. M1.4 is not started.
+
 ## Phase 2: Intensity levels and live targets (weeks 8-12)
 
 | # | Milestone | Done when |
