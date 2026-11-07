@@ -53,6 +53,9 @@
   implemented.
 - The P1 token is the owner's authorization. If the target is shared or production, the owner
   must confirm they control it.
+- Configured IDOR credentials come from a 0600 file, are used only for the three requests, and
+  are redacted from stored results, proofs, reports, logs, and errors. No local IDOR and no
+  discovery in this slice; the config declares the object pair.
 
 ## Responsible disclosure
 

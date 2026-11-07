@@ -16,10 +16,10 @@ P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor p
 implemented (first slice + missing-auth declarations): CORS with credentials, verbose error
 leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
 credentials. P5 read-only signed proof bundles implemented for local and live read-only
-EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans are
-implemented for URLs with a P1 token. IDOR/access control, exposed database rules, live
-write-based checks, hosted/public reports, and intensity levels 1–2 are not started. A clean
-P3 result is `NOT_REPRODUCED`, never "secure."
+EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans and
+configured live IDOR checks are implemented for URLs with a P1 token. IDOR discovery, local
+IDOR, exposed database rules, live write-based checks, hosted/public reports, and intensity
+levels 1–2 are not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -90,7 +90,7 @@ writes `results.json` beside the snapshot, and cleans up. A local path needs no 
 token: the user already has the files. A URL requires the P1 token and runs the same read-only
 probes against the live origin.
 
-The first slice checks four classes:
+The first slice checks five classes:
 
 1. **CORS with credentials** — the response reflects `https://pry.invalid` and sets
    `Access-Control-Allow-Credentials: true`. `*` plus credentials is not reported as EXPOSED.
@@ -101,10 +101,13 @@ The first slice checks four classes:
 4. **Unauthenticated endpoints** — declare protected paths with `--endpoint`; a 200 JSON
    response with no `Authorization` or `Cookie` header is EXPOSED. 401/403/404, a redirect, a
    2xx HTML login page, or an empty body is NOT_REPRODUCED.
+5. **Configured live IDOR** — with `--idor-config`, two identities and two object paths; A→B
+   200 JSON while both controls succeed is EXPOSED. The config is 0600 and credentials are
+   redacted.
 
 The endpoint list is your declaration: Pry does not discover routes or infer auth from code.
 The result is "this declared-protected path returned data with no credentials," not "the app
-has no authentication." Endpoint discovery, IDOR/broken access control, exposed database
+has no authentication." Endpoint discovery, IDOR discovery, local IDOR, exposed database
 rules, and header-only findings are deferred. See [`ETHICS.md`](ETHICS.md) for what an
 exposure does and does not assert.
 
@@ -133,6 +136,33 @@ target; the token is the authorization.
 
 Live GETs are not zero-risk: a GET can trigger a webhook or cache. The user owns the target,
 and Pry keeps the request count minimal.
+
+## Configured IDOR Checks (Live)
+
+IDOR is the companion to missing auth: a user who can read object A must not be able to read
+object B. The check is configured, live-only, and read-only:
+
+```json
+{
+  "identity_a": {"headers": {"Cookie": "session=a"}},
+  "identity_b": {"headers": {"Cookie": "session=b"}},
+  "object_a": "/api/items/1",
+  "object_b": "/api/items/2"
+}
+```
+
+```bash
+chmod 600 idor.json
+pry scan https://example.com --token <token> --idor-config idor.json --report
+```
+
+The config must be 0600. Pry runs three GETs: A→A (control), B→B (control), then A→B. The
+cross request is `EXPOSED` only if it returns a 2xx JSON/non-empty body and both controls
+succeed; 401/403/404 is `NOT_REPRODUCED`; a failed control or 5xx is `UNVERIFIED`. Stored
+request/response headers redact `Cookie`, `Authorization`, `Set-Cookie`, and API key values.
+The config path and credentials never appear in results, proofs, reports, or errors.
+
+No discovery and no local IDOR in this slice. A local path with `--idor-config` exits 2.
 
 ## Signed Proof Bundles (P5 read-only slice)
 
@@ -180,7 +210,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only first slice + live read-only
+3. **PROBE** (Security checks and exploitation) — P3 read-only first slice + live read-only + configured IDOR
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -224,6 +254,9 @@ pry scan ./my-app --endpoint /api/users --endpoint /api/admin
 # Scan a verified URL with the read-only probes
 pry scan https://example.com --token <token> --report
 
+# Configured live IDOR (config must be 0600)
+pry scan https://example.com --token <token> --idor-config idor.json
+
 # Verify a signed proof bundle
 pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
 
@@ -254,7 +287,9 @@ Pry implements a strict ownership gate with:
 6. Every local or live read-only `EXPOSED` result is an Ed25519-signed bundle; `verify-proof`
    checks the signature and fingerprint.
 7. Live scans require a P1 token, are GET-only, send no credentials, and make 4–6 requests;
-   write-based checks and levels 1–2 are not implemented.
+   configured IDOR adds the credentials from a 0600 file to its three requests only. Stored
+   headers redact auth/cookie/API-key values; write-based checks and levels 1–2 are not
+   implemented.
 8. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence.
 9. Absence of a reproduced finding is never reported as "secure".
 
