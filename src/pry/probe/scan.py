@@ -156,6 +156,35 @@ def _sign_exposed(run_dir, snapshot, results):
         ) from exc
 
 
+def finalize_results(run_dir, snapshot, results):
+    """Sign, summarize, write results.json, and bank the corpus for one run.
+
+    Shared by the local and live paths so they cannot drift.
+    """
+    results = _sign_exposed(run_dir, snapshot, results)
+    summary = summarize(results)
+    scan_result = ScanResult(
+        version=SCAN_VERSION,
+        target={
+            "sandbox_id": snapshot["sandbox_id"],
+            "path": snapshot["target"]["path"],
+            "kind": snapshot["target"]["kind"],
+        },
+        results=results,
+        summary=summary,
+        created_at=utc_now(),
+    )
+    results_path = write_results(run_dir, asdict(scan_result))
+    corpus_error = None
+    try:
+        append_findings(
+            _corpus_records(snapshot, results, scan_result.created_at)
+        )
+    except ReportError as exc:
+        corpus_error = str(exc)
+    return results, summary, results_path, corpus_error
+
+
 def scan_local(
     path, *, out=None, timeout=None, port=None, docker=None, endpoints=None
 ):
@@ -200,28 +229,9 @@ def scan_local(
             on_ready=on_ready,
         )
         run_dir = Path(intake_result.snapshot_path).parent
-        results = _sign_exposed(run_dir, intake_result.snapshot, results)
-        summary = summarize(results)
-        scan_result = ScanResult(
-            version=SCAN_VERSION,
-            target={
-                "sandbox_id": intake_result.snapshot["sandbox_id"],
-                "path": intake_result.snapshot["target"]["path"],
-                "kind": intake_result.snapshot["target"]["kind"],
-            },
-            results=results,
-            summary=summary,
-            created_at=utc_now(),
+        results, summary, results_path, corpus_error = finalize_results(
+            run_dir, intake_result.snapshot, results
         )
-        results_path = write_results(run_dir, asdict(scan_result))
-        try:
-            append_findings(
-                _corpus_records(
-                    intake_result.snapshot, results, scan_result.created_at
-                )
-            )
-        except ReportError as exc:
-            corpus_error = str(exc)
     except BaseException as exc:
         failure = exc
         raise
