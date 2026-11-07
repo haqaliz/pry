@@ -13,10 +13,10 @@ the data it should not have returned.
 ## Status
 
 P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor probes
-implemented (first slice): CORS with credentials, verbose error leakage, and exposed secret
-files. Missing authentication, IDOR/access control, exposed database rules, live URL intake,
-and intensity levels 1–2 are not started. A clean P3 result is `NOT_REPRODUCED`, never
-"secure."
+implemented (first slice + missing-auth declarations): CORS with credentials, verbose error
+leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
+credentials. IDOR/access control, exposed database rules, live URL intake, and intensity
+levels 1–2 are not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -87,7 +87,7 @@ writes `results.json` beside the snapshot, and cleans up. A local path needs no 
 token: the user already has the files. A URL still requires the P1 token and remains
 `UNVERIFIED` because live probing is not implemented.
 
-The first slice checks three mechanical classes:
+The first slice checks four classes:
 
 1. **CORS with credentials** — the response reflects `https://pry.invalid` and sets
    `Access-Control-Allow-Credentials: true`. `*` plus credentials is not reported as EXPOSED.
@@ -95,13 +95,19 @@ The first slice checks three mechanical classes:
    debug page, or SQL error.
 3. **Exposed secret files** — a fixed sensitive path returns a file containing a secret.
    Values are redacted before they leave the sidecar.
+4. **Unauthenticated endpoints** — declare protected paths with `--endpoint`; a 200 JSON
+   response with no `Authorization` or `Cookie` header is EXPOSED. 401/403/404, a redirect, a
+   2xx HTML login page, or an empty body is NOT_REPRODUCED.
 
-Each `EXPOSED` carries the request/response pair and a short evidence string. Missing
-authentication, IDOR/broken access control, exposed database rules, and header-only findings
-are deferred. See [`ETHICS.md`](ETHICS.md) for what an exposure does and does not assert.
+The endpoint list is your declaration: Pry does not discover routes or infer auth from code.
+The result is "this declared-protected path returned data with no credentials," not "the app
+has no authentication." Endpoint discovery, IDOR/broken access control, exposed database
+rules, and header-only findings are deferred. See [`ETHICS.md`](ETHICS.md) for what an
+exposure does and does not assert.
 
 ```bash
 pry scan ./my-app
+pry scan ./my-app --endpoint /api/users --endpoint /api/admin
 pry scan ./my-app --json
 ```
 
@@ -152,6 +158,9 @@ pry intake ./my-app
 
 # Scan a local repo with the read-only floor probes
 pry scan ./my-app
+
+# Declare protected paths for the missing-auth check
+pry scan ./my-app --endpoint /api/users --endpoint /api/admin
 
 # Scan a verified URL (live probes are not implemented yet)
 pry scan https://example.com --token <token>

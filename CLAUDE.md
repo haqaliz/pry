@@ -17,11 +17,11 @@ The name: to *pry* something open is to force it, physically, to see whether it 
 of an app: *does it actually hold, or does it give?*
 
 Status: **P1 ownership gate implemented; P2 local intake implemented; P3 read-only probes
-implemented (first slice); live URL intake, authenticated/IDOR checks, exposed database
-rules, and intensity levels 1–2 not started.** The gate lives in `src/pry/own/`; the sandbox
-in `src/pry/intake/`; the probes in `src/pry/probe/`. A local `pry scan` runs the three
-read-only probes; a URL scan still reports `UNVERIFIED`. Do not describe capability that
-isn't there yet.
+implemented (first slice + missing-auth declarations); IDOR/access control, exposed database
+rules, live URL intake, and intensity levels 1–2 not started.** The gate lives in
+`src/pry/own/`; the sandbox in `src/pry/intake/`; the probes in `src/pry/probe/`. A local
+`pry scan --endpoint /path` sends an unauthenticated GET to a declared-protected path; a URL
+scan still reports `UNVERIFIED`. Do not describe capability that isn't there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed

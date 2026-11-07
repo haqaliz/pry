@@ -33,7 +33,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets); P4 adds gated checks
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints); P4 adds gated checks
   proof/      P5: request/response capture, redaction, signing
   corpus/     P6: findings store, report generator
   cli/        pry scan | verify-ownership | report
@@ -50,6 +50,9 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Probes run from a sidecar on an internal network.** The app and the sidecar share a
   per-run Docker `--internal` network; the host runs the probes through `docker exec`. Neither
   container has egress. Secrets are redacted inside the sidecar before the host sees them.
+- **The missing-auth probe only requests declared paths.** The owner supplies path-only
+  declarations; absolute URLs and protocol-relative paths are rejected on the host and in the
+  sidecar. The result quotes the declaration and the response, not a global auth conclusion.
 - **Floor probes are read-only by construction.** Each floor check's implementation is reviewed
   for side effects (a GET that happens to trigger a webhook is not "read-only").
 - **Confirmation is explicit and per-target.** Raising intensity requires a fresh confirmation for

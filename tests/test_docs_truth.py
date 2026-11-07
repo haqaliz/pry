@@ -80,7 +80,7 @@ def test_readme_p3_is_honest():
     text = " ".join(_read("README.md").split())
     assert "P3 read-only floor probes implemented" in text
     assert "ETHICS.md" in text
-    assert "Missing authentication" in text
+    assert "missing-auth declarations" in text
 
 
 def test_claude_p3_status():
@@ -96,3 +96,26 @@ def test_capability_roadmap_p3_status():
 def test_architecture_p3_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
     assert "P3 read-only probes are implemented" in text
+
+
+def test_readme_unauth_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Unauthenticated endpoints" in text
+    assert "--endpoint" in text
+    assert "declared" in text
+
+
+def test_claude_unauth_status():
+    text = " ".join(_read("CLAUDE.md").split())
+    assert "missing-auth declarations" in text
+    assert "--endpoint" in text
+
+
+def test_capability_roadmap_unauth_status():
+    text = _read("docs/technical/CAPABILITY_ROADMAP.md")
+    assert "declared unauthenticated endpoints" in text
+
+
+def test_architecture_unauth_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
+    assert "declared unauth endpoints" in text
