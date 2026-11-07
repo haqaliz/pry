@@ -10,6 +10,18 @@ http
       res.setHeader("Access-Control-Allow-Credentials", "true");
     }
 
+    if (req.url === "/api/users") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"users":[{"id":1,"email":"owner@example.invalid"}]}');
+      return;
+    }
+
+    if (req.url === "/api/private") {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end('{"error":"unauthorized"}');
+      return;
+    }
+
     if (req.url === "/.env") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end(

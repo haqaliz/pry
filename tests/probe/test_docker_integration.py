@@ -54,6 +54,46 @@ def test_safe_fixture_reports_no_exposed(tmp_path):
     assert outcome.summary[EXPOSED] == 0
 
 
+def test_declared_endpoint_without_auth_is_exposed(tmp_path):
+    outcome = scan_local(
+        str(FIXTURES / "vulnerable-app"),
+        out=tmp_path / "run",
+        timeout=60,
+        endpoints=["/api/users"],
+    )
+
+    unauth = [result for result in outcome.results if result.probe == "unauth"]
+    assert len(unauth) == 1
+    assert unauth[0].verdict == EXPOSED
+    headers = {name.lower() for name in unauth[0].request["headers"]}
+    assert "authorization" not in headers
+    assert "cookie" not in headers
+
+
+def test_declared_endpoint_401_is_not_reproduced(tmp_path):
+    outcome = scan_local(
+        str(FIXTURES / "vulnerable-app"),
+        out=tmp_path / "run",
+        timeout=60,
+        endpoints=["/api/private"],
+    )
+
+    unauth = [result for result in outcome.results if result.probe == "unauth"]
+    assert [result.verdict for result in unauth] == [NOT_REPRODUCED]
+
+
+def test_safe_declared_endpoint_is_not_reproduced(tmp_path):
+    outcome = scan_local(
+        str(FIXTURES / "safe-app"),
+        out=tmp_path / "run",
+        timeout=60,
+        endpoints=["/api/users"],
+    )
+
+    unauth = [result for result in outcome.results if result.probe == "unauth"]
+    assert [result.verdict for result in unauth] == [NOT_REPRODUCED]
+
+
 def test_sidecar_has_no_egress():
     docker = DockerRunner()
     network = "pry-net-egress-" + os.urandom(4).hex()
