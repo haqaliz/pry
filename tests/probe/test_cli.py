@@ -46,10 +46,33 @@ def _probe_result(probe, verdict=NOT_REPRODUCED):
     )
 
 
-def _outcome(tmp_path, verdicts):
+def _endpoint_result(path="/api/users", verdict=EXPOSED):
+    return ProbeResult(
+        probe="unauth",
+        verdict=verdict,
+        cause=None,
+        evidence=(
+            "declared-protected path %s returned status 200 with "
+            "application/json and no credentials" % path
+        ),
+        request={
+            "method": "GET",
+            "url": "http://app:8000" + path,
+            "headers": {"User-Agent": "pry/0.1"},
+        },
+        response={
+            "status": 200,
+            "headers": {"content-type": "application/json"},
+            "body": '{"id": 1}',
+        },
+    )
+
+
+def _outcome(tmp_path, verdicts, extra=None):
     results = [
         _probe_result(probe, verdict) for probe, verdict in zip(PROBES, verdicts)
     ]
+    results.extend(extra or [])
     return ScanOutcome(
         snapshot={
             "sandbox_id": "pry-abc123",
@@ -98,7 +121,12 @@ def test_local_scan_with_exposed_probe_exits_one(repo, tmp_path, monkeypatch, ca
     assert "Results: %s" % (tmp_path / "run" / "results.json") in out
     path, kwargs = fake.calls[0]
     assert path == str(repo)
-    assert kwargs == {"out": None, "timeout": None, "port": None}
+    assert kwargs == {
+        "out": None,
+        "timeout": None,
+        "port": None,
+        "endpoints": [],
+    }
 
 
 def test_local_scan_without_exposed_probe_exits_zero(repo, tmp_path, monkeypatch, capsys):
@@ -169,6 +197,7 @@ def test_local_scan_forwards_out_timeout_and_port(repo, tmp_path, monkeypatch):
         "out": str(tmp_path / "out"),
         "timeout": 2.5,
         "port": 3000,
+        "endpoints": [],
     }
 
 
@@ -246,3 +275,136 @@ def test_url_with_path_is_not_treated_as_local(monkeypatch, capsys):
     assert main(["scan", TARGET + "/app"]) == 2
     assert fake.calls == []
     assert "UNVERIFIED" in capsys.readouterr().out
+
+
+def test_local_scan_forwards_repeatable_endpoints(
+    repo, tmp_path, monkeypatch
+):
+    fake = FakeScanLocal(
+        _outcome(
+            tmp_path,
+            [NOT_REPRODUCED] * 3,
+            extra=[
+                _endpoint_result("/api/users"),
+                _endpoint_result("/api/admin", NOT_REPRODUCED),
+            ],
+        )
+    )
+    monkeypatch.setattr("pry.cli.scan_local", fake)
+
+    assert (
+        main(
+            [
+                "scan",
+                str(repo),
+                "--endpoint",
+                "/api/users",
+                "--endpoint",
+                "/api/admin",
+            ]
+        )
+        == 1
+    )
+    assert fake.calls[0][1]["endpoints"] == ["/api/users", "/api/admin"]
+
+
+def test_local_scan_human_output_includes_the_endpoint_result(
+    repo, tmp_path, monkeypatch, capsys
+):
+    fake = FakeScanLocal(
+        _outcome(
+            tmp_path,
+            [NOT_REPRODUCED] * 3,
+            extra=[_endpoint_result("/api/users", EXPOSED)],
+        )
+    )
+    monkeypatch.setattr("pry.cli.scan_local", fake)
+
+    assert main(["scan", str(repo), "--endpoint", "/api/users"]) == 1
+
+    out = capsys.readouterr().out
+    assert "unauth: EXPOSED" in out
+    assert "/api/users" in out
+
+
+def test_local_scan_json_includes_the_endpoint_result(
+    repo, tmp_path, monkeypatch, capsys
+):
+    fake = FakeScanLocal(
+        _outcome(
+            tmp_path,
+            [NOT_REPRODUCED] * 3,
+            extra=[_endpoint_result("/api/users", EXPOSED)],
+        )
+    )
+    monkeypatch.setattr("pry.cli.scan_local", fake)
+
+    assert (
+        main(["scan", str(repo), "--endpoint", "/api/users", "--json"]) == 1
+    )
+
+    data = json.loads(capsys.readouterr().out)
+    assert [entry["probe"] for entry in data["results"]] == [
+        "cors",
+        "errors",
+        "secrets",
+        "unauth",
+    ]
+    assert data["results"][-1]["request"]["url"].endswith("/api/users")
+    assert data["summary"] == {
+        EXPOSED: 1,
+        NOT_REPRODUCED: 3,
+        UNVERIFIED: 0,
+    }
+
+
+def test_local_scan_exits_zero_when_the_endpoint_is_not_exposed(
+    repo, tmp_path, monkeypatch, capsys
+):
+    fake = FakeScanLocal(
+        _outcome(
+            tmp_path,
+            [NOT_REPRODUCED] * 3,
+            extra=[_endpoint_result("/api/private", NOT_REPRODUCED)],
+        )
+    )
+    monkeypatch.setattr("pry.cli.scan_local", fake)
+
+    assert main(["scan", str(repo), "--endpoint", "/api/private"]) == 0
+    assert "unauth: NOT_REPRODUCED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "http://evil.invalid",
+        "https://evil.invalid/api",
+        "//evil.invalid",
+        "/api users",
+        "api/users",
+        "",
+        "/" + "a" * 2048,
+    ],
+)
+def test_local_scan_rejects_invalid_endpoints_before_scanning(
+    repo, monkeypatch, capsys, bad
+):
+    fake = FakeScanLocal()
+    monkeypatch.setattr("pry.cli.scan_local", fake)
+
+    assert (
+        main(
+            [
+                "scan",
+                str(repo),
+                "--endpoint",
+                "/api/users",
+                "--endpoint",
+                bad,
+            ]
+        )
+        == 2
+    )
+
+    assert fake.calls == []
+    assert "UNVERIFIED: INVALID_ENDPOINT" in capsys.readouterr().out

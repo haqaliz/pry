@@ -443,8 +443,9 @@ def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
             "unauth",
             NOT_REPRODUCED,
             None,
-            "declared-protected path %s returned status %d; the request was "
-            "rejected" % (path, response.status),
+            "declared-protected path %s returned status %d (content type %r); "
+            "the request was rejected"
+            % (path, response.status, content_type),
             "GET",
             url,
             headers,
@@ -455,8 +456,8 @@ def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
             "unauth",
             UNVERIFIED,
             None,
-            "declared-protected path %s returned status %d; cannot confirm the "
-            "check" % (path, response.status),
+            "declared-protected path %s returned status %d (content type %r); "
+            "cannot confirm the check" % (path, response.status, content_type),
             "GET",
             url,
             headers,
@@ -467,8 +468,8 @@ def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
             "unauth",
             NOT_REPRODUCED,
             None,
-            "declared-protected path %s returned status %d with an empty body"
-            % (path, response.status),
+            "declared-protected path %s returned status %d (content type %r) "
+            "with an empty body" % (path, response.status, content_type),
             "GET",
             url,
             headers,
@@ -479,8 +480,9 @@ def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
             "unauth",
             EXPOSED,
             None,
-            "declared-protected path %s returned status %d with %s and no "
-            "credentials" % (path, response.status, content_type or "JSON"),
+            "declared-protected path %s returned status %d (content type %r) "
+            "with a non-empty JSON body and no credentials"
+            % (path, response.status, content_type),
             "GET",
             url,
             headers,
@@ -491,8 +493,8 @@ def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
             "unauth",
             NOT_REPRODUCED,
             None,
-            "declared-protected path %s returned status %d with content type "
-            "%r; likely a login page" % (path, response.status, content_type),
+            "declared-protected path %s returned status %d (content type %r); "
+            "likely a login page" % (path, response.status, content_type),
             "GET",
             url,
             headers,
@@ -502,8 +504,8 @@ def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
         "unauth",
         NOT_REPRODUCED,
         None,
-        "declared-protected path %s returned status %d with content type %r "
-        "and no JSON body" % (path, response.status, content_type),
+        "declared-protected path %s returned status %d (content type %r) "
+        "with no JSON body" % (path, response.status, content_type),
         "GET",
         url,
         headers,

@@ -229,7 +229,15 @@ def test_scan_help_lists_local_scan_flags(capsys):
         main(["scan", "--help"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    for flag in ("--json", "--out", "--timeout", "--port", "--token", "--level"):
+    for flag in (
+        "--json",
+        "--out",
+        "--timeout",
+        "--port",
+        "--token",
+        "--level",
+        "--endpoint",
+    ):
         assert flag in out
 
 

@@ -21,7 +21,7 @@ from pry.own.target import Target, normalize_target
 from pry.own.tokens import OwnershipToken, TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
-from pry.probe.scan import scan_local
+from pry.probe.scan import scan_local, validate_endpoints
 
 _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHOD}
 _PROBE_INCONCLUSIVE = ("PROBE_INCONCLUSIVE", "probe suite not implemented")
@@ -75,6 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan.add_argument(
         "--port", type=int, help="Port the app listens on inside the sandbox"
+    )
+    scan.add_argument(
+        "--endpoint",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Declared-protected path to GET without credentials (repeatable)",
     )
 
     intake_parser = subparsers.add_parser(
@@ -218,8 +225,18 @@ def _scan_target_path(args) -> int:
         return 2
 
     try:
+        endpoints = validate_endpoints(args.endpoint)
+    except ProbeError as exc:
+        _print_error(exc)
+        return 2
+
+    try:
         outcome = scan_local(
-            args.target, out=args.out, timeout=args.timeout, port=args.port
+            args.target,
+            out=args.out,
+            timeout=args.timeout,
+            port=args.port,
+            endpoints=endpoints,
         )
     except (IntakeError, ProbeError) as exc:
         _print_error(exc)
