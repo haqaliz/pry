@@ -3,7 +3,7 @@
 - **Feature:** `signed-proof-bundles`
 - **Aspect:** `ed25519-bundles`
 - **PRD:** `../prd.md`
-- **Status:** Approved on standing instruction (2026-11-08)
+- **Status:** Implemented and merged (2026-11-08)
 
 ## Problem slice
 

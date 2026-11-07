@@ -1,6 +1,7 @@
 # PRD — Signed Proof Bundles (P5 read-only slice)
 
-- **Status:** Approved on standing instruction (2026-11-08)
+- **Status:** Merged to `master` (2026-11-08). Read-only signed bundles implemented for
+  local EXPOSED findings; live replay, key distribution, and the rest of P5 are deferred.
 - **Owner:** aliz
 - **Slug:** `signed-proof-bundles`
 - **Capability:** P5 read-only slice (M1.2)
