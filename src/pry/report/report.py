@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlsplit
 
 from pry.probe.results import RESULTS_FILE, VERDICTS
 from pry.proof import ProofError, load_bundle, verify_bundle
@@ -199,6 +200,8 @@ def _headers_text(headers) -> str:
 
 
 def _target_basename(path: str) -> str:
+    if "://" in path:
+        return urlsplit(path).hostname or path
     return Path(path).name or path
 
 
@@ -259,17 +262,25 @@ def _finding_html(finding: Finding) -> str:
 
 def _target_html(report: Report) -> str:
     target = report.target
-    dirty = target.get("git_dirty")
-    dirty_text = "unknown" if dirty is None else ("yes" if dirty else "no")
     rows = [
         ("Target", _target_basename(target.get("path", ""))),
         ("Kind", target.get("kind")),
-        ("Commit", target.get("git_commit")),
-        ("Dirty", dirty_text),
-        ("Snapshot", report.snapshot_id),
-        ("Run created", report.snapshot.get("created_at")),
-        ("Results created", report.created_at),
     ]
+    if target.get("kind") == "live":
+        rows.append(("URL", target.get("url") or target.get("path")))
+        rows.append(("Ownership proof", target.get("ownership_proof")))
+    else:
+        dirty = target.get("git_dirty")
+        dirty_text = "unknown" if dirty is None else ("yes" if dirty else "no")
+        rows.append(("Commit", target.get("git_commit")))
+        rows.append(("Dirty", dirty_text))
+    rows.extend(
+        [
+            ("Snapshot", report.snapshot_id),
+            ("Run created", report.snapshot.get("created_at")),
+            ("Results created", report.created_at),
+        ]
+    )
     return "<dl class=\"meta\">%s</dl>" % "".join(
         "<dt>%s</dt><dd>%s</dd>" % (_esc(name), _esc(value))
         for name, value in rows
@@ -334,7 +345,7 @@ bundles are the evidence; this HTML file is not signed.</p>
 <h2>What this report does not claim</h2>
 <p><strong>No secure verdict.</strong> Pry does not certify this app as secure. NOT_REPRODUCED means a suspected issue could not be confirmed; it is not proof of absence. Absence of a reproduced finding is not a guarantee of safety.</p>
 <p><strong>What VALID means.</strong> VALID means the bundle's embedded key verified the signature. It is tamper-evidence, not proof of who created it; pin the fingerprint to trust a signer.</p>
-<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR and access-control checks, exposed database rules, header-only findings, live URL intake, and intensity levels 1-2 are not implemented in this local read-only slice.</p>
+<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR and access-control checks, exposed database rules, header-only findings, authenticated scans, write-based checks, and intensity levels 1-2 are not implemented in this read-only slice.</p>
 </section>
 <section>
 <h2>Target</h2>

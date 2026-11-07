@@ -13,7 +13,12 @@ from pry.report.corpus import (
     REPORT_MISSING,
     ReportError,
 )
-from pry.report.report import load_run, render_html, write_report
+from pry.report.report import (
+    _target_basename,
+    load_run,
+    render_html,
+    write_report,
+)
 
 SANDBOX_ID = "pry-0123456789ab"
 COMMIT = "a" * 40
@@ -400,3 +405,87 @@ def test_write_report_failure_raises_report_failed(tmp_path):
         write_report(run_dir, out=blocker / "report.html")
 
     assert exc.value.cause == REPORT_FAILED
+
+
+LIVE_URL = "https://app.example.com"
+LIVE_SANDBOX_ID = "live-0123456789ab"
+
+
+def _live_snapshot():
+    return {
+        "version": 1,
+        "sandbox_id": LIVE_SANDBOX_ID,
+        "created_at": "2026-11-08T00:00:00Z",
+        "target": {
+            "path": LIVE_URL,
+            "kind": "live",
+            "url": LIVE_URL,
+            "ownership_proof": "dns_txt",
+            "git_commit": None,
+            "git_dirty": None,
+            "tree_sha256": None,
+        },
+        "project": {},
+        "sandbox": {"network": "live"},
+        "result": {"status": "ready"},
+    }
+
+
+def _signed_live_run(tmp_path):
+    entries = [
+        _entry("cors", EXPOSED),
+        _entry("errors", NOT_REPRODUCED),
+        _entry("secrets", UNVERIFIED),
+    ]
+    run_dir = _write_run(tmp_path, entries, _live_snapshot())
+    signer = ProofSigner()
+    bundle = build_bundle(
+        {
+            "sandbox_id": LIVE_SANDBOX_ID,
+            "path": LIVE_URL,
+            "kind": "live",
+            "url": LIVE_URL,
+            "ownership_proof": "dns_txt",
+        },
+        entries[0],
+        signer=signer,
+        created_at=CREATED_AT,
+    )
+    proof = write_bundle(run_dir, bundle)
+    entries[0]["proof"] = str(proof)
+    _write_results(run_dir, entries)
+    return run_dir, signer.fingerprint
+
+
+def test_target_basename_handles_urls_and_local_paths():
+    assert _target_basename("https://app.example.com/x") == "app.example.com"
+    assert _target_basename("/repos/acme-app") == "acme-app"
+
+
+def test_a_live_report_shows_the_host_url_and_ownership_proof(tmp_path):
+    run_dir, fingerprint = _signed_live_run(tmp_path)
+
+    report = load_run(run_dir)
+    html = render_html(report)
+
+    assert report.target["kind"] == "live"
+    assert "app.example.com" in html
+    assert LIVE_URL in html
+    assert "Ownership proof" in html
+    assert "dns_txt" in html
+    assert fingerprint in html
+    assert "VALID" in html
+    assert str(tmp_path) not in html
+    assert "Commit" not in html
+    assert "Dirty" not in html
+
+
+def test_a_local_report_keeps_the_commit_rows_without_live_fields(tmp_path):
+    run_dir, _ = _signed_run(tmp_path)
+
+    html = render_html(load_run(run_dir))
+
+    assert "Commit" in html
+    assert COMMIT in html
+    assert "Ownership proof" not in html
+    assert "<dt>URL</dt>" not in html
