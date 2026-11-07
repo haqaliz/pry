@@ -5,6 +5,7 @@ Local fixtures only; never a third-party target.
 """
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from pry.intake.docker import DockerRunner
 from pry.intake.project import tree_sha256
 from pry.probe.results import EXPOSED, NOT_REPRODUCED
 from pry.probe.scan import scan_local, sidecar_script_path
+from pry.proof import load_bundle, verify_bundle
 
 pytestmark = [
     pytest.mark.docker,
@@ -23,6 +25,11 @@ pytestmark = [
 ]
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def proof_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("PRY_PROOF_KEY", str(tmp_path / "proof.key"))
 
 
 def test_vulnerable_fixture_reports_three_exposed(tmp_path):
@@ -92,6 +99,51 @@ def test_safe_declared_endpoint_is_not_reproduced(tmp_path):
 
     unauth = [result for result in outcome.results if result.probe == "unauth"]
     assert [result.verdict for result in unauth] == [NOT_REPRODUCED]
+
+
+def test_vulnerable_scan_writes_verifiable_bundles(tmp_path):
+    outcome = scan_local(
+        str(FIXTURES / "vulnerable-app"),
+        out=tmp_path / "run",
+        timeout=60,
+        endpoints=["/api/users"],
+    )
+
+    exposed = [result for result in outcome.results if result.verdict == EXPOSED]
+    assert len(exposed) == 4
+    for result in exposed:
+        assert result.proof is not None
+        path = Path(result.proof)
+        assert path.is_file()
+        payload, fingerprint = verify_bundle(load_bundle(path))
+        assert payload["finding"]["verdict"] == EXPOSED
+        assert fingerprint.startswith("sha256:")
+
+
+def test_safe_scan_writes_no_bundles(tmp_path):
+    outcome = scan_local(
+        str(FIXTURES / "safe-app"), out=tmp_path / "run", timeout=60
+    )
+
+    assert not any(result.verdict == EXPOSED for result in outcome.results)
+    assert not (tmp_path / "run" / "proofs").exists()
+
+
+def test_copied_bundle_verifies_without_the_run_dir(tmp_path):
+    outcome = scan_local(
+        str(FIXTURES / "vulnerable-app"), out=tmp_path / "run", timeout=60
+    )
+    exposed = next(
+        result for result in outcome.results if result.verdict == EXPOSED
+    )
+    copied = tmp_path / "copied.json"
+    shutil.copyfile(exposed.proof, str(copied))
+    shutil.rmtree(tmp_path / "run")
+
+    payload, fingerprint = verify_bundle(load_bundle(copied))
+
+    assert payload["finding"]["probe"] == exposed.probe
+    assert fingerprint.startswith("sha256:")
 
 
 def test_sidecar_has_no_egress():
