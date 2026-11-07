@@ -22,7 +22,7 @@ from pry.own.tokens import OwnershipToken, TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
 from pry.probe.scan import scan_local, validate_endpoints
-from pry.proof import ProofError
+from pry.proof import ProofError, load_bundle, verify_bundle
 
 _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHOD}
 _PROBE_INCONCLUSIVE = ("PROBE_INCONCLUSIVE", "probe suite not implemented")
@@ -84,6 +84,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Declared-protected path to GET without credentials (repeatable)",
     )
+
+    verify_proof = subparsers.add_parser(
+        "verify-proof", help="Verify a signed proof bundle"
+    )
+    verify_proof.add_argument("file", help="Path to a proof bundle JSON file")
+    verify_proof.add_argument(
+        "--fingerprint",
+        help="Expected sha256:... fingerprint to pin",
+    )
+    verify_proof.add_argument("--json", action="store_true", help="Print JSON")
 
     intake_parser = subparsers.add_parser(
         "intake", help="Boot a local repository in a Docker sandbox"
@@ -202,6 +212,50 @@ def cmd_verify(args) -> int:
     else:
         print("Ownership verified for %s (%s)" % (target.origin, METHODS[args.method]))
         print("Token: %s" % token)
+    return 0
+
+
+def cmd_verify_proof(args) -> int:
+    try:
+        bundle = load_bundle(args.file)
+        payload, fingerprint = verify_bundle(
+            bundle, expected_fingerprint=args.fingerprint
+        )
+    except ProofError as exc:
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "status": "invalid",
+                        "cause": exc.cause,
+                        "message": exc.message,
+                    }
+                )
+            )
+        else:
+            print("INVALID: %s: %s" % (exc.cause, exc.message))
+        return 1
+
+    finding = payload["finding"]
+    target = payload["target"]
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "status": "valid",
+                    "fingerprint": fingerprint,
+                    "finding": finding,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    print("VALID")
+    print("Fingerprint: %s" % fingerprint)
+    print("Probe: %s" % finding.get("probe"))
+    print("Verdict: %s" % finding.get("verdict"))
+    print("Target: %s (%s)" % (target.get("path"), target.get("kind")))
     return 0
 
 
@@ -359,6 +413,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     if args.command == "verify-ownership":
         return cmd_verify(args)
+    if args.command == "verify-proof":
+        return cmd_verify_proof(args)
     if args.command == "intake":
         return cmd_intake(args)
     return cmd_scan(args)
