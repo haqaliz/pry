@@ -481,3 +481,213 @@ def test_sidecar_is_standard_library_only():
     assert not any(
         name == "pry" or name.startswith("pry.") for name in imported
     ), imported
+
+
+ENDPOINT = "/api/users"
+
+
+def _unauth_response(status=200, headers=None, body="", path=ENDPOINT):
+    return sidecar.Response(status, headers or {}, body, BASE + path)
+
+
+def test_unauth_200_json_without_credentials_is_exposed():
+    fetch = FakeFetch(
+        _unauth_response(
+            200,
+            {"Content-Type": "application/json; charset=utf-8"},
+            '{"users": [{"id": 1}]}',
+        )
+    )
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["probe"] == "unauth"
+    assert result["verdict"] == sidecar.EXPOSED
+    assert result["cause"] is None
+    assert ENDPOINT in result["evidence"]
+    assert "200" in result["evidence"]
+    assert "application/json" in result["evidence"]
+    assert fetch.calls == [
+        ("GET", BASE + ENDPOINT, {"User-Agent": sidecar.USER_AGENT})
+    ]
+    assert result["request"] == {
+        "method": "GET",
+        "url": BASE + ENDPOINT,
+        "headers": {"user-agent": sidecar.USER_AGENT},
+    }
+    assert set(result["request"]["headers"]) == {"user-agent"}
+    assert len(fetch.calls) == 1
+
+
+def test_unauth_json_looking_body_without_a_json_content_type_is_exposed():
+    fetch = FakeFetch(
+        _unauth_response(
+            200, {"Content-Type": "text/plain"}, '  [{"id": 1}]'
+        )
+    )
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["verdict"] == sidecar.EXPOSED
+    assert ENDPOINT in result["evidence"]
+
+
+def test_unauth_empty_json_body_is_not_reproduced():
+    fetch = FakeFetch(
+        _unauth_response(200, {"Content-Type": "application/json"}, "")
+    )
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert "empty" in result["evidence"].lower()
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_unauth_rejected_statuses_are_not_reproduced(status):
+    fetch = FakeFetch(
+        _unauth_response(
+            status, {"Content-Type": "application/json"}, '{"error": "no"}'
+        )
+    )
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert ENDPOINT in result["evidence"]
+    assert str(status) in result["evidence"]
+
+
+def test_unauth_200_html_login_page_is_not_reproduced():
+    fetch = FakeFetch(
+        _unauth_response(
+            200,
+            {"Content-Type": "text/html; charset=utf-8"},
+            "<!doctype html><form>login</form>",
+        )
+    )
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert "login page" in result["evidence"].lower()
+
+
+def test_unauth_500_is_unverified():
+    fetch = FakeFetch(_unauth_response(500, {}, "boom"))
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["response"]["status"] == 500
+
+
+def test_unauth_transport_failure_is_unverified_with_a_named_cause():
+    fetch = FakeFetch(
+        sidecar.TransportError(sidecar.REQUEST_TIMEOUT, "timed out")
+    )
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.REQUEST_TIMEOUT
+    assert result["response"] is None
+    assert len(fetch.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "http://evil.invalid",
+        "https://evil.invalid/api",
+        "//evil.invalid",
+        "api/users",
+        "",
+        "/api users",
+        "/api\tusers",
+        "/api\nusers",
+        "/api\x00users",
+        "/" + "a" * 2048,
+    ],
+)
+def test_unauth_invalid_paths_are_refused_before_any_fetch(path):
+    fetch = FakeFetch()
+
+    result = sidecar.probe_unauth(BASE, path, fetch=fetch)
+
+    assert result["probe"] == "unauth"
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.INVALID_ENDPOINT
+    assert result["response"] is None
+    assert "path" in result["evidence"].lower()
+    assert fetch.calls == []
+
+
+def test_unauth_accepts_a_path_at_the_length_limit():
+    path = "/" + "a" * 2047
+    fetch = FakeFetch(_unauth_response(404, {}, "missing", path))
+
+    result = sidecar.probe_unauth(BASE, path, fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert fetch.calls[0][1] == BASE + path
+
+
+def test_unauth_caps_the_captured_body_and_lowercases_headers():
+    body = '{"data": "' + "x" * (sidecar.BODY_LIMIT * 2) + '"}'
+    fetch = FakeFetch(
+        _unauth_response(200, {"Content-Type": "Application/JSON"}, body)
+    )
+
+    result = sidecar.probe_unauth(BASE, ENDPOINT, fetch=fetch)
+
+    assert result["verdict"] == sidecar.EXPOSED
+    assert len(result["response"]["body"]) == sidecar.BODY_LIMIT
+    assert result["response"]["headers"] == {"content-type": "Application/JSON"}
+    assert result["request"]["headers"] == {"user-agent": sidecar.USER_AGENT}
+
+
+def test_main_accepts_unauth_with_a_path(capsys):
+    fetch = FakeFetch(
+        _unauth_response(
+            200, {"Content-Type": "application/json"}, '{"id": 1}'
+        )
+    )
+
+    code = sidecar.main(["unauth", BASE, ENDPOINT], fetch=fetch)
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["probe"] == "unauth"
+    assert payload["verdict"] == sidecar.EXPOSED
+    assert fetch.calls[0][1] == BASE + ENDPOINT
+
+
+def test_main_prints_an_invalid_endpoint_as_unverified_json(capsys):
+    code = sidecar.main(["unauth", BASE, "http://evil.invalid"], fetch=FakeFetch())
+    captured = capsys.readouterr()
+
+    assert code == 0
+    payload = json.loads(captured.out)
+    assert payload["verdict"] == sidecar.UNVERIFIED
+    assert payload["cause"] == sidecar.INVALID_ENDPOINT
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["unauth", BASE],
+        ["unauth", BASE, ENDPOINT, "/extra"],
+        ["cors", BASE, ENDPOINT],
+        ["idor", BASE, ENDPOINT],
+    ],
+)
+def test_main_rejects_invalid_argv_for_the_new_probe(argv, capsys):
+    code = sidecar.main(argv, fetch=FakeFetch())
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert "usage" in captured.err.lower()

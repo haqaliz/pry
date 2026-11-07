@@ -17,6 +17,7 @@ import urllib.request
 from dataclasses import dataclass
 
 BODY_LIMIT = 4096
+ENDPOINT_LIMIT = 2048
 TIMEOUT = 5
 ORIGIN = "https://pry.invalid"
 USER_AGENT = "pry/0.1"
@@ -28,6 +29,7 @@ UNVERIFIED = "UNVERIFIED"
 TARGET_UNREACHABLE = "TARGET_UNREACHABLE"
 REQUEST_TIMEOUT = "REQUEST_TIMEOUT"
 REQUEST_FAILED = "REQUEST_FAILED"
+INVALID_ENDPOINT = "INVALID_ENDPOINT"
 
 ERROR_PATH = "/__pry_missing__?id=%27"
 SECRET_PATHS = (
@@ -402,17 +404,143 @@ def probe_secrets(base_url: str, fetch=None) -> dict:
     )
 
 
+def _is_endpoint_path(path) -> bool:
+    if not isinstance(path, str) or not path or len(path) > ENDPOINT_LIMIT:
+        return False
+    if not path.startswith("/") or path.startswith("//") or "://" in path:
+        return False
+    return not any(
+        char.isspace() or ord(char) < 32 or ord(char) == 127 for char in path
+    )
+
+
+def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
+    """GET a declared-protected path with no credentials and decide exposure."""
+    fetch = fetch if fetch is not None else urllib_fetch
+    headers = {"User-Agent": USER_AGENT}
+    if not _is_endpoint_path(path):
+        return _result(
+            "unauth",
+            UNVERIFIED,
+            INVALID_ENDPOINT,
+            "invalid endpoint path %r: not path-only" % (path,),
+            "GET",
+            path,
+            headers,
+            None,
+        )
+
+    url = base_url.rstrip("/") + path
+    try:
+        response = fetch("GET", url, headers)
+    except TransportError as exc:
+        return _transport_result("unauth", "GET", url, headers, exc)
+
+    content_type = _headers(response.headers).get("content-type", "")
+    body = response.body or ""
+    if response.status in (401, 403, 404):
+        return _result(
+            "unauth",
+            NOT_REPRODUCED,
+            None,
+            "declared-protected path %s returned status %d; the request was "
+            "rejected" % (path, response.status),
+            "GET",
+            url,
+            headers,
+            response,
+        )
+    if not 200 <= response.status < 300:
+        return _result(
+            "unauth",
+            UNVERIFIED,
+            None,
+            "declared-protected path %s returned status %d; cannot confirm the "
+            "check" % (path, response.status),
+            "GET",
+            url,
+            headers,
+            response,
+        )
+    if not body.strip():
+        return _result(
+            "unauth",
+            NOT_REPRODUCED,
+            None,
+            "declared-protected path %s returned status %d with an empty body"
+            % (path, response.status),
+            "GET",
+            url,
+            headers,
+            response,
+        )
+    if "json" in content_type.lower() or body.lstrip().startswith(("{", "[")):
+        return _result(
+            "unauth",
+            EXPOSED,
+            None,
+            "declared-protected path %s returned status %d with %s and no "
+            "credentials" % (path, response.status, content_type or "JSON"),
+            "GET",
+            url,
+            headers,
+            response,
+        )
+    if "html" in content_type.lower():
+        return _result(
+            "unauth",
+            NOT_REPRODUCED,
+            None,
+            "declared-protected path %s returned status %d with content type "
+            "%r; likely a login page" % (path, response.status, content_type),
+            "GET",
+            url,
+            headers,
+            response,
+        )
+    return _result(
+        "unauth",
+        NOT_REPRODUCED,
+        None,
+        "declared-protected path %s returned status %d with content type %r "
+        "and no JSON body" % (path, response.status, content_type),
+        "GET",
+        url,
+        headers,
+        response,
+    )
+
+
 PROBES = {
     "cors": probe_cors,
     "errors": probe_errors,
     "secrets": probe_secrets,
+    "unauth": probe_unauth,
 }
 
 
 def main(argv=None, fetch=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    usage = (
+        "usage: sidecar.py {cors|errors|secrets} BASE_URL | "
+        "sidecar.py unauth BASE_URL PATH\n"
+    )
+    if not args:
+        sys.stderr.write(usage)
+        return 2
+    if args[0] == "unauth":
+        if len(args) != 3:
+            sys.stderr.write(usage)
+            return 2
+        _, base_url, path = args
+        print(
+            json.dumps(
+                probe_unauth(base_url, path, fetch=fetch), sort_keys=True
+            )
+        )
+        return 0
     if len(args) != 2 or args[0] not in PROBES:
-        sys.stderr.write("usage: sidecar.py {cors|errors|secrets} BASE_URL\n")
+        sys.stderr.write(usage)
         return 2
     probe, base_url = args
     print(json.dumps(PROBES[probe](base_url, fetch=fetch), sort_keys=True))
