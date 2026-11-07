@@ -207,7 +207,10 @@ def _proof_html(finding: Finding) -> str:
         return "<p>No proof bundle attached.</p>"
     rows = ["<dt>Status</dt><dd>%s</dd>" % _esc(finding.proof_status)]
     if finding.proof:
-        rows.append("<dt>Bundle</dt><dd>%s</dd>" % _esc(finding.proof))
+        rows.append(
+            "<dt>Bundle</dt><dd>%s</dd>"
+            % _esc(Path(finding.proof).name)
+        )
     if finding.fingerprint:
         rows.append(
             "<dt>Fingerprint</dt><dd>%s</dd>" % _esc(finding.fingerprint)
@@ -259,8 +262,7 @@ def _target_html(report: Report) -> str:
     dirty = target.get("git_dirty")
     dirty_text = "unknown" if dirty is None else ("yes" if dirty else "no")
     rows = [
-        ("Target", target.get("path")),
-        ("Basename", _target_basename(target.get("path", ""))),
+        ("Target", _target_basename(target.get("path", ""))),
         ("Kind", target.get("kind")),
         ("Commit", target.get("git_commit")),
         ("Dirty", dirty_text),
@@ -331,7 +333,8 @@ bundles are the evidence; this HTML file is not signed.</p>
 <section class="disclaimer">
 <h2>What this report does not claim</h2>
 <p><strong>No secure verdict.</strong> Pry does not certify this app as secure. NOT_REPRODUCED means a suspected issue could not be confirmed; it is not proof of absence. Absence of a reproduced finding is not a guarantee of safety.</p>
-<p><strong>Deferred checks.</strong> IDOR and access-control checks, exposed database rules, live URL intake, and intensity levels 1-2 are not implemented in this local read-only slice.</p>
+<p><strong>What VALID means.</strong> VALID means the bundle's embedded key verified the signature. It is tamper-evidence, not proof of who created it; pin the fingerprint to trust a signer.</p>
+<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR and access-control checks, exposed database rules, header-only findings, live URL intake, and intensity levels 1-2 are not implemented in this local read-only slice.</p>
 </section>
 <section>
 <h2>Target</h2>
