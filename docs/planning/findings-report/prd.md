@@ -1,6 +1,7 @@
 # PRD — Findings Report and Corpus (P6 read-only local slice)
 
-- **Status:** Approved on standing instruction (2026-11-08)
+- **Status:** Merged to `master` (2026-11-08). Local HTML report and JSONL corpus implemented;
+  hosted/public reports, P4, live URL, and the remaining P3 checks are deferred.
 - **Owner:** aliz
 - **Slug:** `findings-report`
 - **Capability:** P6 read-only local slice
