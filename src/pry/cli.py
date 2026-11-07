@@ -22,6 +22,7 @@ from pry.own.tokens import OwnershipToken, TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
 from pry.probe.scan import scan_local, validate_endpoints
+from pry.proof import ProofError
 
 _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHOD}
 _PROBE_INCONCLUSIVE = ("PROBE_INCONCLUSIVE", "probe suite not implemented")
@@ -238,7 +239,7 @@ def _scan_target_path(args) -> int:
             port=args.port,
             endpoints=endpoints,
         )
-    except (IntakeError, ProbeError) as exc:
+    except (IntakeError, ProbeError, ProofError) as exc:
         _print_error(exc)
         return 2
 

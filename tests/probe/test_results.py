@@ -62,7 +62,39 @@ def test_probe_result_has_exactly_the_contract_fields():
         "evidence",
         "request",
         "response",
+        "proof",
     ]
+
+
+def test_probe_result_proof_defaults_to_none():
+    assert _result().proof is None
+
+
+def test_probe_result_accepts_a_proof_path():
+    result = ProbeResult(
+        probe="cors",
+        verdict=EXPOSED,
+        cause=None,
+        evidence="reflected",
+        request={"method": "GET", "url": "http://app/", "headers": {}},
+        response={"status": 200, "headers": {}, "body": "ok"},
+        proof="/run/proofs/" + "a" * 64 + ".json",
+    )
+
+    assert result.proof == "/run/proofs/" + "a" * 64 + ".json"
+
+
+def test_probe_result_parses_a_sidecar_payload_without_proof():
+    payload = {
+        "probe": "cors",
+        "verdict": NOT_REPRODUCED,
+        "cause": None,
+        "evidence": "cors checked",
+        "request": {"method": "GET", "url": "http://app/", "headers": {}},
+        "response": {"status": 200, "headers": {}, "body": "ok"},
+    }
+
+    assert ProbeResult(**payload).proof is None
 
 
 def test_probe_result_requires_every_field():

@@ -17,6 +17,7 @@ from pry.probe.results import (
     summarize,
 )
 from pry.probe.scan import ScanOutcome
+from pry.proof import PROOF_FAILED, ProofError
 
 TARGET = "https://example.com"
 PROBES = ("cors", "errors", "secrets")
@@ -240,6 +241,22 @@ def test_local_scan_reports_probe_errors(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "UNVERIFIED: RESULTS_FAILED" in out
     assert "cannot write results" in out
+
+
+def test_local_scan_signing_failure_exits_two(monkeypatch, capsys):
+    fake = FakeScanLocal(
+        error=ProofError(
+            PROOF_FAILED,
+            "cannot sign findings: PROOF_KEY_INVALID: key file must contain "
+            "exactly 32 bytes",
+        )
+    )
+    monkeypatch.setattr("pry.cli.scan_local", fake)
+
+    assert main(["scan", "./app"]) == 2
+    out = capsys.readouterr().out
+    assert "UNVERIFIED: PROOF_FAILED" in out
+    assert "PROOF_KEY_INVALID" in out
 
 
 def test_url_scan_with_valid_token_is_unverified(capsys):

@@ -29,6 +29,12 @@ from pry.probe.results import (
     summarize,
 )
 from pry.probe.scan import INVALID_ENDPOINT, ScanOutcome
+from pry.proof import (
+    PROOF_FAILED,
+    ProofError,
+    load_bundle,
+    verify_bundle,
+)
 
 SANDBOX_ID = "pry-0123456789ab"
 SIDECAR = "pry-probe-" + SANDBOX_ID
@@ -135,8 +141,18 @@ def _snapshot(path="/repo", kind="static"):
         "version": 1,
         "sandbox_id": SANDBOX_ID,
         "created_at": "2026-11-07T00:00:00Z",
-        "target": {"path": path, "kind": kind},
-        "project": {},
+        "target": {
+            "path": path,
+            "kind": kind,
+            "git_commit": "a" * 40,
+            "git_dirty": False,
+            "tree_sha256": "b" * 64,
+        },
+        "project": {
+            "image": "python:3.9-slim",
+            "image_digest": "sha256:" + "c" * 64,
+            "port": PORT,
+        },
         "sandbox": {},
         "result": {},
     }
@@ -162,6 +178,17 @@ def repo(tmp_path):
     path = tmp_path / "repo"
     path.mkdir()
     return path
+
+
+@pytest.fixture(autouse=True)
+def proof_key(tmp_path, monkeypatch):
+    path = tmp_path / "proof.key"
+    monkeypatch.setenv("PRY_PROOF_KEY", str(path))
+    return path
+
+
+def _proof_files(run_dir):
+    return sorted((Path(run_dir) / "proofs").glob("*.json"))
 
 
 def _network_of(docker):
@@ -296,6 +323,7 @@ def test_scan_writes_results_json_beside_the_snapshot(repo, tmp_path, monkeypatc
             "evidence",
             "request",
             "response",
+            "proof",
         }
         assert entry["request"]["headers"] == {"user-agent": "pry/0.1"}
 
@@ -511,3 +539,120 @@ def test_scan_rejects_invalid_endpoints_before_touching_docker(
     assert exc.value.cause == INVALID_ENDPOINT
     assert docker.calls == []
     assert fake.calls == []
+
+
+EXPECTED_TARGET = {
+    "sandbox_id": SANDBOX_ID,
+    "path": "/repo",
+    "kind": "static",
+    "git_commit": "a" * 40,
+    "git_dirty": False,
+    "tree_sha256": "b" * 64,
+    "image": "python:3.9-slim",
+    "image_digest": "sha256:" + "c" * 64,
+    "port": PORT,
+}
+
+
+def _scan_with_verdicts(repo, tmp_path, monkeypatch, verdicts):
+    docker = FakeDocker(
+        responses={
+            probe: _payload(probe, verdict)
+            for probe, verdict in verdicts.items()
+        }
+    )
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+    return scan.scan_local(repo, out=tmp_path / "run", docker=docker), docker
+
+
+def test_scan_writes_one_signed_bundle_per_exposed_finding(
+    repo, tmp_path, monkeypatch
+):
+    outcome, _ = _scan_with_verdicts(
+        repo,
+        tmp_path,
+        monkeypatch,
+        {"cors": EXPOSED, "errors": NOT_REPRODUCED, "secrets": EXPOSED},
+    )
+
+    proofs = _proof_files(tmp_path / "run")
+    assert len(proofs) == 2
+    exposed = [result for result in outcome.results if result.verdict == EXPOSED]
+    assert len(exposed) == 2
+    assert all(result.proof for result in exposed)
+    assert all(
+        result.proof is None
+        for result in outcome.results
+        if result.verdict != EXPOSED
+    )
+
+    fingerprints = set()
+    for result in exposed:
+        bundle = load_bundle(result.proof)
+        payload, fingerprint = verify_bundle(bundle)
+        assert payload["target"] == EXPECTED_TARGET
+        assert payload["finding"] == {
+            "probe": result.probe,
+            "verdict": EXPOSED,
+            "cause": result.cause,
+            "evidence": result.evidence,
+            "request": result.request,
+            "response": result.response,
+        }
+        assert stat.S_IMODE(Path(result.proof).stat().st_mode) == 0o600
+        fingerprints.add(fingerprint)
+    assert len(fingerprints) == 1
+
+
+def test_scan_results_json_includes_proof_paths(repo, tmp_path, monkeypatch):
+    outcome, _ = _scan_with_verdicts(
+        repo,
+        tmp_path,
+        monkeypatch,
+        {"cors": EXPOSED, "errors": NOT_REPRODUCED, "secrets": EXPOSED},
+    )
+
+    data = json.loads(outcome.results_path.read_text())
+    proofs = [entry["proof"] for entry in data["results"]]
+    assert proofs[0] is not None
+    assert proofs[1] is None
+    assert proofs[2] is not None
+    assert proofs[0] != proofs[2]
+    for proof in (proofs[0], proofs[2]):
+        assert Path(proof).is_file()
+        payload, _ = verify_bundle(load_bundle(proof))
+        assert payload["finding"]["verdict"] == EXPOSED
+
+
+def test_scan_writes_no_bundle_without_exposed_findings(
+    repo, tmp_path, monkeypatch, proof_key
+):
+    outcome, _ = _scan_with_verdicts(
+        repo,
+        tmp_path,
+        monkeypatch,
+        {"cors": NOT_REPRODUCED, "errors": UNVERIFIED, "secrets": NOT_REPRODUCED},
+    )
+
+    assert [result.proof for result in outcome.results] == [None, None, None]
+    assert not (tmp_path / "run" / "proofs").exists()
+    assert not proof_key.exists()
+
+
+def test_signing_failure_is_proof_failed_and_writes_no_results(
+    repo, tmp_path, monkeypatch, proof_key
+):
+    proof_key.write_bytes(b"short")
+    docker = FakeDocker(responses={"cors": _payload("cors", EXPOSED)})
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    with pytest.raises(ProofError) as exc:
+        scan.scan_local(repo, out=tmp_path / "run", docker=docker)
+
+    assert exc.value.cause == PROOF_FAILED
+    assert "PROOF_KEY_INVALID" in exc.value.message
+    assert not (tmp_path / "run" / "results.json").exists()
+    assert not (tmp_path / "run" / "proofs").exists()
+    assert docker.sidecars == []
+    assert docker.networks == []
+    assert proof_key.read_bytes() == b"short"

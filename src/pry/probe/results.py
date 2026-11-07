@@ -52,6 +52,7 @@ class ProbeResult:
     evidence: str
     request: dict
     response: Optional[dict]
+    proof: Optional[str] = None
 
     def __post_init__(self):
         if self.verdict not in VERDICTS:

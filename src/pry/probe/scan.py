@@ -1,7 +1,7 @@
 """Scan a local repository in the sandbox and write results.json."""
 
 import secrets
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from pry.intake import SandboxHandle, intake
@@ -10,10 +10,19 @@ from pry.intake.errors import REPO_NOT_FOUND, IntakeError
 from pry.intake.snapshot import utc_now
 from pry.probe.client import ProbeClient
 from pry.probe.results import (
+    EXPOSED,
     ProbeError,
+    ProbeResult,
     ScanResult,
     summarize,
     write_results,
+)
+from pry.proof import (
+    PROOF_FAILED,
+    ProofError,
+    ProofSigner,
+    build_bundle,
+    write_bundle,
 )
 
 SCAN_VERSION = 1
@@ -65,6 +74,55 @@ def validate_endpoints(endpoints) -> list:
     return endpoints
 
 
+def _proof_target(snapshot: dict) -> dict:
+    target = snapshot["target"]
+    project = snapshot["project"]
+    return {
+        "sandbox_id": snapshot["sandbox_id"],
+        "path": target["path"],
+        "kind": target["kind"],
+        "git_commit": target.get("git_commit"),
+        "git_dirty": target.get("git_dirty"),
+        "tree_sha256": target.get("tree_sha256"),
+        "image": project.get("image"),
+        "image_digest": project.get("image_digest"),
+        "port": project.get("port"),
+    }
+
+
+def _finding(result: ProbeResult) -> dict:
+    return {
+        "probe": result.probe,
+        "verdict": result.verdict,
+        "cause": result.cause,
+        "evidence": result.evidence,
+        "request": result.request,
+        "response": result.response,
+    }
+
+
+def _sign_exposed(run_dir, snapshot, results):
+    """Write one bundle per EXPOSED result and attach its path."""
+    if not any(result.verdict == EXPOSED for result in results):
+        return list(results)
+    try:
+        signer = ProofSigner()
+        target = _proof_target(snapshot)
+        signed = []
+        for result in results:
+            if result.verdict != EXPOSED:
+                signed.append(result)
+                continue
+            bundle = build_bundle(target, _finding(result), signer=signer)
+            path = write_bundle(run_dir, bundle)
+            signed.append(replace(result, proof=str(path)))
+        return signed
+    except ProofError as exc:
+        raise ProofError(
+            PROOF_FAILED, "cannot sign findings: %s" % exc
+        ) from exc
+
+
 def scan_local(
     path, *, out=None, timeout=None, port=None, docker=None, endpoints=None
 ):
@@ -107,6 +165,8 @@ def scan_local(
             network=network,
             on_ready=on_ready,
         )
+        run_dir = Path(intake_result.snapshot_path).parent
+        results = _sign_exposed(run_dir, intake_result.snapshot, results)
         summary = summarize(results)
         scan_result = ScanResult(
             version=SCAN_VERSION,
@@ -119,9 +179,7 @@ def scan_local(
             summary=summary,
             created_at=utc_now(),
         )
-        results_path = write_results(
-            Path(intake_result.snapshot_path).parent, asdict(scan_result)
-        )
+        results_path = write_results(run_dir, asdict(scan_result))
     except BaseException as exc:
         failure = exc
         raise
