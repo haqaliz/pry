@@ -1,6 +1,7 @@
 # PRD — Unauthenticated Endpoints (P3 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-07)
+- **Status:** Merged to `master` (2026-11-07). Missing-auth declarations implemented;
+  discovery, IDOR, exposed database rules, live URL, and levels 1–2 remain deferred.
 - **Owner:** aliz
 - **Slug:** `unauthenticated-endpoints`
 - **Capability:** P3 remainder (missing authentication)

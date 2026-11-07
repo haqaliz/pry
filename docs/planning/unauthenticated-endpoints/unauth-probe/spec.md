@@ -3,7 +3,7 @@
 - **Feature:** `unauthenticated-endpoints`
 - **Aspect:** `unauth-probe`
 - **PRD:** `../prd.md`
-- **Status:** Approved on standing instruction (2026-11-07)
+- **Status:** Implemented and merged (2026-11-07)
 
 ## Problem slice
 
