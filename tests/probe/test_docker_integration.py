@@ -1,0 +1,80 @@
+"""Opt-in Docker integration for the P3 read-only probes.
+
+Run with: PRY_DOCKER_TESTS=1 uv run pytest -q -m docker
+Local fixtures only; never a third-party target.
+"""
+
+import os
+from pathlib import Path
+
+import pytest
+
+from pry.intake.docker import DockerRunner
+from pry.intake.project import tree_sha256
+from pry.probe.results import EXPOSED, NOT_REPRODUCED
+from pry.probe.scan import scan_local, sidecar_script_path
+
+pytestmark = [
+    pytest.mark.docker,
+    pytest.mark.skipif(
+        os.environ.get("PRY_DOCKER_TESTS") != "1",
+        reason="set PRY_DOCKER_TESTS=1 to run Docker integration tests",
+    ),
+]
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+
+
+def test_vulnerable_fixture_reports_three_exposed(tmp_path):
+    fixture = FIXTURES / "vulnerable-app"
+    before = tree_sha256(fixture)
+
+    outcome = scan_local(str(fixture), out=tmp_path / "run", timeout=60)
+
+    verdicts = {result.probe: result.verdict for result in outcome.results}
+    assert verdicts == {
+        "cors": EXPOSED,
+        "errors": EXPOSED,
+        "secrets": EXPOSED,
+    }
+    assert outcome.summary[EXPOSED] == 3
+
+    body = (tmp_path / "run" / "results.json").read_text(encoding="utf-8")
+    assert "supersecretvalue123" not in body
+    assert "[redacted]" in body
+    assert tree_sha256(fixture) == before
+
+
+def test_safe_fixture_reports_no_exposed(tmp_path):
+    outcome = scan_local(
+        str(FIXTURES / "safe-app"), out=tmp_path / "run", timeout=60
+    )
+
+    assert [result.verdict for result in outcome.results] == [NOT_REPRODUCED] * 3
+    assert outcome.summary[EXPOSED] == 0
+
+
+def test_sidecar_has_no_egress():
+    docker = DockerRunner()
+    network = "pry-net-egress-" + os.urandom(4).hex()
+    sidecar = None
+    docker.create_network(network)
+    try:
+        sidecar = docker.start_sidecar(
+            network, "pry-egress-" + os.urandom(4).hex(), sidecar_script_path()
+        )
+        result = docker.exec(
+            sidecar,
+            [
+                "python",
+                "-c",
+                "import urllib.request; "
+                "urllib.request.urlopen('http://203.0.113.1/', timeout=3)",
+            ],
+            timeout=10,
+        )
+        assert result.returncode != 0
+    finally:
+        if sidecar is not None:
+            docker.remove(sidecar)
+        docker.remove_network(network)
