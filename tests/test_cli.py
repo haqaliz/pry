@@ -1,13 +1,12 @@
 """CLI and ownership gate tests (AT9-AT13)."""
 
-import json
-
 import pytest
 
-from pry.cli import main, run_scan
+from pry.cli import main
 from pry.own.errors import OwnershipError
 from pry.own.target import normalize_target
 from pry.own.tokens import TokenSigner
+from pry.probe.scan import ScanOutcome
 
 TARGET = "https://example.com"
 NONCE = "A" * 43
@@ -147,37 +146,36 @@ def test_scan_expired_token_is_rejected(capsys):
 
 def test_scan_never_runs_probe_without_a_valid_token(monkeypatch):
     called = []
-    monkeypatch.setattr("pry.cli.run_scan", lambda proof: called.append(proof) or 0)
+    monkeypatch.setattr("pry.cli.scan_live", lambda *a, **k: called.append(a) or 0)
 
     assert main(["scan", TARGET, "--token", "garbage"]) == 2
     assert called == []
 
 
-def test_scan_valid_token_calls_run_scan(monkeypatch):
+def test_scan_valid_token_calls_scan_live(tmp_path, monkeypatch):
     token = _token()
     seen = []
-    monkeypatch.setattr("pry.cli.run_scan", lambda proof: seen.append(proof) or 1)
 
-    assert main(["scan", TARGET, "--token", token]) == 1
-    assert len(seen) == 1
-    assert seen[0].target == TARGET
+    def fake(url, given, **kwargs):
+        seen.append((url, given))
+        return ScanOutcome(
+            snapshot={},
+            results=[],
+            results_path=tmp_path / "results.json",
+            summary={},
+        )
 
+    monkeypatch.setattr("pry.cli.scan_live", fake)
 
-def test_run_scan_reports_unverified(capsys):
-    token = _token()
-    proof = TokenSigner().validate(token, normalize_target(TARGET))
-
-    assert run_scan(proof) == 1
-    out = capsys.readouterr().out
-    assert "UNVERIFIED" in out
-    assert "PROBE_INCONCLUSIVE" in out
+    assert main(["scan", TARGET, "--token", token]) == 0
+    assert seen == [(TARGET, token)]
 
 
 @pytest.mark.parametrize("level", ["1", "2"])
 def test_scan_rejects_higher_intensity(level, monkeypatch, capsys):
     token = _token()
     called = []
-    monkeypatch.setattr("pry.cli.run_scan", lambda proof: called.append(proof) or 0)
+    monkeypatch.setattr("pry.cli.scan_live", lambda *a, **k: called.append(a) or 0)
 
     assert main(["scan", TARGET, "--token", token, "--level", level]) == 2
     assert called == []
@@ -189,10 +187,20 @@ def test_scan_reads_token_file(tmp_path, monkeypatch):
     path = tmp_path / "token"
     path.write_text(token)
     seen = []
-    monkeypatch.setattr("pry.cli.run_scan", lambda proof: seen.append(proof) or 1)
 
-    assert main(["scan", TARGET, "--token-file", str(path)]) == 1
-    assert len(seen) == 1
+    def fake(url, given, **kwargs):
+        seen.append(given)
+        return ScanOutcome(
+            snapshot={},
+            results=[],
+            results_path=tmp_path / "results.json",
+            summary={},
+        )
+
+    monkeypatch.setattr("pry.cli.scan_live", fake)
+
+    assert main(["scan", TARGET, "--token-file", str(path)]) == 0
+    assert seen == [token]
 
 
 def test_scan_rejects_both_token_sources(tmp_path, capsys):
@@ -211,17 +219,6 @@ def test_scan_missing_token_file_is_usage_error(tmp_path, capsys):
 def test_scan_bare_host_is_treated_as_url_and_requires_token(capsys):
     assert main(["scan", "example.com"]) == 2
     assert "UNVERIFIED" in capsys.readouterr().out
-
-
-def test_scan_url_json_reports_unverified(capsys):
-    token = _token()
-
-    assert main(["scan", TARGET, "--token", token, "--json"]) == 1
-    assert json.loads(capsys.readouterr().out) == {
-        "status": "unverified",
-        "cause": "PROBE_INCONCLUSIVE",
-        "message": "probe suite not implemented",
-    }
 
 
 def test_scan_help_lists_local_scan_flags(capsys):

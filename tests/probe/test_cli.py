@@ -100,6 +100,18 @@ class FakeScanLocal:
         return self.outcome
 
 
+class FakeScanLive:
+    """Stand-in for pry.cli.scan_live; never touches the network."""
+
+    def __init__(self, outcome=None):
+        self.outcome = outcome
+        self.calls = []
+
+    def __call__(self, url, token, **kwargs):
+        self.calls.append((url, token, kwargs))
+        return self.outcome
+
+
 @pytest.fixture
 def repo(tmp_path):
     path = tmp_path / "repo"
@@ -259,9 +271,15 @@ def test_local_scan_signing_failure_exits_two(monkeypatch, capsys):
     assert "PROOF_KEY_INVALID" in out
 
 
-def test_url_scan_with_valid_token_is_unverified(capsys):
-    assert main(["scan", TARGET, "--token", _token()]) == 1
-    assert "UNVERIFIED: PROBE_INCONCLUSIVE" in capsys.readouterr().out
+def test_url_scan_with_valid_token_runs_the_live_path(
+    tmp_path, monkeypatch, capsys
+):
+    fake = FakeScanLive(_outcome(tmp_path, [NOT_REPRODUCED] * 3))
+    monkeypatch.setattr("pry.cli.scan_live", fake)
+
+    assert main(["scan", TARGET, "--token", _token()]) == 0
+    assert fake.calls[0][0] == TARGET
+    assert "cors: NOT_REPRODUCED" in capsys.readouterr().out
 
 
 def test_url_scan_without_token_is_rejected(capsys):
@@ -274,15 +292,15 @@ def test_url_scan_with_invalid_token_is_rejected(capsys):
     assert "TOKEN_MALFORMED" in capsys.readouterr().out
 
 
-def test_url_scan_json_prints_unverified_object(capsys):
-    assert main(["scan", TARGET, "--token", _token(), "--json"]) == 1
+def test_url_scan_json_prints_results(tmp_path, monkeypatch, capsys):
+    fake = FakeScanLive(_outcome(tmp_path, [NOT_REPRODUCED] * 3))
+    monkeypatch.setattr("pry.cli.scan_live", fake)
+
+    assert main(["scan", TARGET, "--token", _token(), "--json"]) == 0
 
     data = json.loads(capsys.readouterr().out)
-    assert data == {
-        "status": "unverified",
-        "cause": "PROBE_INCONCLUSIVE",
-        "message": "probe suite not implemented",
-    }
+    assert [entry["probe"] for entry in data["results"]] == list(PROBES)
+    assert "status" not in data
 
 
 def test_url_with_path_is_not_treated_as_local(monkeypatch, capsys):

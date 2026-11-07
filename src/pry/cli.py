@@ -19,15 +19,15 @@ from pry.own.errors import (
     OwnershipError,
 )
 from pry.own.target import Target, normalize_target
-from pry.own.tokens import OwnershipToken, TokenSigner
+from pry.own.tokens import TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
+from pry.probe.live import scan_live
 from pry.probe.scan import scan_local, validate_endpoints
 from pry.proof import ProofError, load_bundle, verify_bundle
 from pry.report import ReportError, load_run, write_report
 
 _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHOD}
-_PROBE_INCONCLUSIVE = ("PROBE_INCONCLUSIVE", "probe suite not implemented")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan.add_argument("--json", action="store_true", help="Print JSON")
     scan.add_argument(
-        "--out", help="Run directory for a local scan (default: ~/.pry/runs/<id>)"
+        "--out", help="Run directory for a scan (default: ~/.pry/runs/<id>)"
     )
     scan.add_argument(
         "--timeout", type=float, help="Sandbox readiness timeout in seconds"
@@ -89,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--report",
         action="store_true",
-        help="Write an HTML findings report after a local scan",
+        help="Write an HTML findings report after a scan",
     )
 
     report = subparsers.add_parser(
@@ -361,6 +361,36 @@ def _scan_target_path(args) -> int:
         _print_error(exc)
         return 2
 
+    return _finish_scan(args, outcome)
+
+
+def _scan_target_url(args) -> int:
+    if args.level != 0:
+        _print_error(
+            OwnershipError(INTENSITY_INSUFFICIENT, "only level 0 is implemented"),
+            args.json,
+        )
+        return 2
+
+    try:
+        target = normalize_target(args.target)
+        token = _resolve_token(args)
+        TokenSigner().validate(token, target)
+        endpoints = validate_endpoints(args.endpoint)
+    except (OwnershipError, ProbeError) as exc:
+        _print_error(exc, args.json)
+        return 2
+
+    try:
+        outcome = scan_live(args.target, token, endpoints=endpoints, out=args.out)
+    except (OwnershipError, IntakeError, ProbeError, ProofError) as exc:
+        _print_error(exc, args.json)
+        return 2
+
+    return _finish_scan(args, outcome)
+
+
+def _finish_scan(args, outcome) -> int:
     summary = summarize(outcome.results)
     if outcome.corpus_error:
         print(
@@ -398,38 +428,7 @@ def _scan_target_path(args) -> int:
 def cmd_scan(args) -> int:
     if _looks_local(args.target):
         return _scan_target_path(args)
-
-    try:
-        target = normalize_target(args.target)
-        token = _resolve_token(args)
-        proof = TokenSigner().validate(token, target)
-    except OwnershipError as exc:
-        _print_error(exc)
-        return 2
-
-    if args.level != 0:
-        _print_error(
-            OwnershipError(
-                INTENSITY_INSUFFICIENT, "only level 0 is implemented"
-            )
-        )
-        return 2
-
-    if args.json:
-        cause, message = _PROBE_INCONCLUSIVE
-        print(
-            json.dumps(
-                {"status": "unverified", "cause": cause, "message": message}
-            )
-        )
-        return 1
-
-    return run_scan(proof)
-
-
-def run_scan(proof: OwnershipToken) -> int:
-    print("UNVERIFIED: %s: %s" % _PROBE_INCONCLUSIVE)
-    return 1
+    return _scan_target_url(args)
 
 
 def cmd_intake(args) -> int:
