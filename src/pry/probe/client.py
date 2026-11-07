@@ -46,8 +46,10 @@ class ProbeClient:
         self.base_url = base_url
         self.timeout = timeout
 
-    def run(self, probe: str) -> ProbeResult:
+    def run(self, probe: str, endpoint=None) -> ProbeResult:
         command = ["python", SIDECAR_PATH, probe, self.base_url]
+        if probe == "unauth" and endpoint is not None:
+            command.append(endpoint)
         try:
             result = self.docker.exec(self.sidecar, command, timeout=self.timeout)
         except Exception as exc:

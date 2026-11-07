@@ -24,10 +24,11 @@ from pry.probe.results import (
     EXPOSED,
     NOT_REPRODUCED,
     UNVERIFIED,
+    ProbeError,
     ProbeResult,
     summarize,
 )
-from pry.probe.scan import ScanOutcome
+from pry.probe.scan import INVALID_ENDPOINT, ScanOutcome
 
 SANDBOX_ID = "pry-0123456789ab"
 SIDECAR = "pry-probe-" + SANDBOX_ID
@@ -406,3 +407,107 @@ def test_network_cleanup_failure_does_not_mask_an_intake_failure(
 
     assert exc.value.cause == BUILD_FAILED
     assert any(call[0] == "remove_network" for call in docker.calls)
+
+
+def test_scan_runs_one_unauth_probe_per_declared_endpoint(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker(responses={"unauth": _payload("unauth", EXPOSED)})
+    fake = FakeIntake(_snapshot())
+    monkeypatch.setattr(scan, "intake", fake)
+
+    outcome = scan.scan_local(
+        repo,
+        out=tmp_path / "run",
+        docker=docker,
+        endpoints=["/api/users", "/api/admin"],
+    )
+
+    exec_calls = [call for call in docker.calls if call[0] == "exec"]
+    assert [call[2] for call in exec_calls] == [
+        ["python", "/pry/sidecar.py", "cors", BASE],
+        ["python", "/pry/sidecar.py", "errors", BASE],
+        ["python", "/pry/sidecar.py", "secrets", BASE],
+        ["python", "/pry/sidecar.py", "unauth", BASE, "/api/users"],
+        ["python", "/pry/sidecar.py", "unauth", BASE, "/api/admin"],
+    ]
+    assert [result.probe for result in outcome.results] == [
+        "cors",
+        "errors",
+        "secrets",
+        "unauth",
+        "unauth",
+    ]
+    assert [result.verdict for result in outcome.results] == [
+        NOT_REPRODUCED,
+        NOT_REPRODUCED,
+        NOT_REPRODUCED,
+        EXPOSED,
+        EXPOSED,
+    ]
+    assert outcome.summary == {
+        EXPOSED: 2,
+        NOT_REPRODUCED: 3,
+        UNVERIFIED: 0,
+    }
+    data = json.loads(outcome.results_path.read_text())
+    assert [entry["probe"] for entry in data["results"]] == [
+        "cors",
+        "errors",
+        "secrets",
+        "unauth",
+        "unauth",
+    ]
+    assert data["summary"] == {EXPOSED: 2, NOT_REPRODUCED: 3, UNVERIFIED: 0}
+    assert docker.sidecars == []
+    assert docker.networks == []
+
+
+def test_scan_without_declared_endpoints_runs_exactly_three_probes(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    fake = FakeIntake(_snapshot())
+    monkeypatch.setattr(scan, "intake", fake)
+
+    outcome = scan.scan_local(repo, out=tmp_path / "run", docker=docker)
+
+    exec_calls = [call for call in docker.calls if call[0] == "exec"]
+    assert len(exec_calls) == 3
+    assert [result.probe for result in outcome.results] == [
+        "cors",
+        "errors",
+        "secrets",
+    ]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "http://evil.invalid",
+        "https://evil.invalid/api",
+        "//evil.invalid",
+        "/api users",
+        "api/users",
+        "",
+        "/" + "a" * 2048,
+    ],
+)
+def test_scan_rejects_invalid_endpoints_before_touching_docker(
+    repo, tmp_path, monkeypatch, bad
+):
+    docker = FakeDocker()
+    fake = FakeIntake(_snapshot())
+    monkeypatch.setattr(scan, "intake", fake)
+
+    with pytest.raises(ProbeError) as exc:
+        scan.scan_local(
+            repo,
+            out=tmp_path / "run",
+            docker=docker,
+            endpoints=["/api/users", bad],
+        )
+
+    assert exc.value.cause == INVALID_ENDPOINT
+    assert docker.calls == []
+    assert fake.calls == []

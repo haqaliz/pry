@@ -9,9 +9,16 @@ from pry.intake.docker import DockerRunner
 from pry.intake.errors import REPO_NOT_FOUND, IntakeError
 from pry.intake.snapshot import utc_now
 from pry.probe.client import ProbeClient
-from pry.probe.results import ScanResult, summarize, write_results
+from pry.probe.results import (
+    ProbeError,
+    ScanResult,
+    summarize,
+    write_results,
+)
 
 SCAN_VERSION = 1
+ENDPOINT_LIMIT = 2048
+INVALID_ENDPOINT = "INVALID_ENDPOINT"
 
 
 @dataclass(frozen=True)
@@ -33,8 +40,36 @@ def _validated_path(path) -> Path:
     return original
 
 
-def scan_local(path, *, out=None, timeout=None, port=None, docker=None):
+def _is_endpoint_path(path) -> bool:
+    if not isinstance(path, str) or not path or len(path) > ENDPOINT_LIMIT:
+        return False
+    if not path.startswith("/") or path.startswith("//") or "://" in path:
+        return False
+    return not any(
+        char.isspace() or ord(char) < 32 or ord(char) == 127 for char in path
+    )
+
+
+def validate_endpoints(endpoints) -> list:
+    """Return the declared paths unchanged, or fail before any Docker work."""
+    endpoints = list(endpoints or ())
+    for path in endpoints:
+        if not _is_endpoint_path(path):
+            raise ProbeError(
+                INVALID_ENDPOINT,
+                "invalid endpoint path %r: expected a path starting with '/', "
+                "no '://', no leading '//', no whitespace or control "
+                "characters, and at most %d characters"
+                % (path, ENDPOINT_LIMIT),
+            )
+    return endpoints
+
+
+def scan_local(
+    path, *, out=None, timeout=None, port=None, docker=None, endpoints=None
+):
     _validated_path(path)
+    endpoints = validate_endpoints(endpoints)
     runner = docker if docker is not None else DockerRunner()
     network = "pry-net-" + secrets.token_hex(6)
     results = []
@@ -44,11 +79,12 @@ def scan_local(path, *, out=None, timeout=None, port=None, docker=None):
         failure = None
         try:
             runner.start_sidecar(network, sidecar, sidecar_script_path())
-            results.extend(
-                ProbeClient(
-                    runner, sidecar, "http://app:%d" % handle.port
-                ).run_all()
+            client = ProbeClient(
+                runner, sidecar, "http://app:%d" % handle.port
             )
+            results.extend(client.run_all())
+            for endpoint in endpoints:
+                results.append(client.run("unauth", endpoint=endpoint))
         except BaseException as exc:
             failure = exc
             raise

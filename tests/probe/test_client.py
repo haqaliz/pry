@@ -176,3 +176,69 @@ def test_run_all_runs_cors_errors_and_secrets_in_order():
     assert [call[1][2] for call in fake.calls] == ["cors", "errors", "secrets"]
     assert [result.probe for result in results] == ["cors", "errors", "secrets"]
     assert len(fake.calls) == 3
+
+
+def test_run_unauth_appends_the_declared_path():
+    fake = FakeDocker([_json(_payload("unauth"))])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run(
+        "unauth", endpoint="/api/users"
+    )
+
+    assert fake.calls == [
+        (
+            SIDECAR,
+            ["python", "/pry/sidecar.py", "unauth", BASE, "/api/users"],
+            20,
+        )
+    ]
+    assert result.probe == "unauth"
+
+
+def test_run_default_probes_ignore_an_endpoint_argument():
+    fake = FakeDocker([_json(_payload("errors"))])
+
+    ProbeClient(fake, SIDECAR, BASE).run("errors", endpoint="/api/users")
+
+    assert fake.calls[0][1] == ["python", "/pry/sidecar.py", "errors", BASE]
+
+
+def test_an_unauth_exec_failure_is_unverified_with_a_cause():
+    fake = FakeDocker([CommandResult(2, b"", b"usage: sidecar.py", False)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run(
+        "unauth", endpoint="/api/users"
+    )
+
+    assert result.probe == "unauth"
+    assert result.verdict == UNVERIFIED
+    assert result.cause == EXEC_FAILED
+    assert result.response is None
+    assert "usage" in result.evidence
+
+
+def test_an_unauth_timeout_is_unverified_with_a_cause():
+    fake = FakeDocker([CommandResult(-1, b"", b"", True)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run(
+        "unauth", endpoint="/api/users"
+    )
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == EXEC_TIMEOUT
+    assert result.response is None
+
+
+def test_the_sidecars_invalid_endpoint_cause_is_carried_through():
+    payload = _payload("unauth", UNVERIFIED)
+    payload["cause"] = "INVALID_ENDPOINT"
+    payload["response"] = None
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run(
+        "unauth", endpoint="http://evil.invalid"
+    )
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == "INVALID_ENDPOINT"
+    assert result.response is None
