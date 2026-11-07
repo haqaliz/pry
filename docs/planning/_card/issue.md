@@ -1,60 +1,59 @@
-# Signed Proof Bundles (P5 read-only slice)
+# Findings Report and Corpus (P6 read-only local slice)
 
 - **Type:** feat
-- **Slug:** `signed-proof-bundles`
+- **Slug:** `findings-report`
 - **Owner:** aliz
 - **Source:** inline brief. No GitHub issue.
-- **Capability:** P5 read-only slice (M1.2). Depends on P1–P3 and `ETHICS.md`.
+- **Capability:** P6 read-only local slice. Depends on P1–P3, P5 read-only signed bundles, and
+  `ETHICS.md`.
 
 ## Brief
 
-Every `EXPOSED` finding from a local scan must ship as a signed, tamper-evident bundle that
-can be verified without the scanner. Today `results.json` holds a redacted request/response
-pair but no signature, no bundle id, and no independent verification. That is the gap
-between "we saved something" and "here is the proof."
+Pry now writes `results.json` and signed proof bundles, but the app owner has no readable
+artifact. P6 must bank the findings and generate a self-contained report they can read and
+share. This slice is local-only: HTML generated from a run directory, no upload, no hosted
+service.
 
-Use Ed25519. The bundle contains the finding payload (target snapshot, probe, verdict,
-evidence, request, response), the public key, its fingerprint, and the signature. A new
-`pry verify-proof <file>` command verifies the signature and prints the fingerprint. The
-signature proves integrity and key possession; it does not prove the app is secure.
-`NOT_REPRODUCED` and `UNVERIFIED` results are not signed.
+The report shows the target snapshot, the verdict counts, each probe's evidence and
+request/response, and the proof fingerprint with a VALID/INVALID status. It repeats the
+no-secure-claim and deferred-checks caveats. It uses the already-redacted results; it must not
+introduce raw secrets.
 
 ## Current state
 
-- P1, P2, P3 first slice, and declared unauthenticated endpoints are merged.
-- Local scans write `results.json` plus `snapshot.json`; no signed bundles.
-- `cryptography` is not a dependency yet.
+- Local scans write `snapshot.json`, `results.json`, and `proofs/<bundle_id>.json`.
+- `pry verify-proof` verifies a bundle.
+- There is no corpus and no report command.
 - `ETHICS.md` is approved.
 
 ## Scope
 
-1. Add `cryptography` (Ed25519) to `pyproject.toml`; Python 3.9 compatible.
-2. Proof key: `~/.pry/proof.key` (32-byte seed, 0600), `PRY_PROOF_KEY` override, generated
-   on first use with `O_CREAT|O_EXCL`.
-3. Bundle: `version`, `created_at`, `payload` (target + finding), `signature`
-   (`alg`, `public_key`, `fingerprint`, `value`), `bundle_id` = sha256 of canonical payload.
-   Canonical JSON, sorted keys; signature over the payload bytes.
-4. `pry scan` writes `proofs/<bundle_id>.json` for each `EXPOSED` result (0600), adds the
-   bundle path to the result, and leaves `NOT_REPRODUCED`/`UNVERIFIED` unsigned.
-5. `pry verify-proof <file> [--fingerprint sha256:...]`: VALID/INVALID, exit 0/1; prints the
-   fingerprint and finding summary. Optional fingerprint pinning is the trust anchor.
-6. Tests: sign/verify, tamper payload/signature/key, wrong fingerprint, malformed bundle,
-   key/bundle permissions, scan writes only EXPOSED bundles, CLI, Docker integration.
-7. Docs: the bundle, the trust model, and what the signature does not assert.
+1. Corpus: append one JSONL record per finding to `~/.pry/corpus.jsonl` (`PRY_CORPUS`
+   override), 0600; record target, probe, verdict, cause, proof path, fingerprint, timestamp.
+   A corpus write failure is a warning, not a scan failure.
+2. `pry report RUN_DIR [--out PATH] [--json]`: load `snapshot.json`/`results.json`, verify each
+   proof, render a self-contained HTML file (default `RUN_DIR/report.html`), 0600.
+3. `pry scan ./app --report`: generate the report after a local scan and print its path.
+4. Report content: target basename/kind/commit/dirty/snapshot id, counts, per-finding probe/
+   verdict/evidence/request/response, proof fingerprint and validity, no-secure/deferred note.
+5. Escape all report text (HTML injection safe); no external CSS/JS/assets; no upload.
+6. Tests: corpus, report load/render/escaping, invalid proof, missing files, CLI, Docker.
 
 ## Out of scope
 
-- P4, live URL, IDOR/DB rules, remaining P3 checks.
-- Key distribution, revocation, multi-user trust stores, hosted verification.
-- Signing a claim about the whole app; only the reproduced finding is signed.
+- Hosted reports, public sharing, PDF export, email.
+- P4, live URL, IDOR/DB rules, remaining P3.
+- Report signing (the proof bundles are signed; the report is a view).
+- Uploading any report or proof by default.
 
 ## Acceptance criteria
 
-- A vulnerable local scan writes one bundle per `EXPOSED`; each verifies.
-- A safe scan writes no bundles.
-- Tampering with the payload or signature → INVALID.
-- A different public key → INVALID; a mismatched `--fingerprint` → INVALID.
-- The private key never appears in the bundle; key 0600, bundle 0600.
-- `pry verify-proof` works from a copied bundle without the run directory.
+- A vulnerable local scan writes a report with four findings and four proof fingerprints;
+  each proof shows VALID.
+- A safe scan writes a report with zero EXPOSED and no proof fingerprints.
+- A tampered proof shows INVALID in the report; the report does not claim it is verified.
+- `<script>` in evidence/body is escaped, not executable.
+- Missing/invalid run files → a named error, no traceback.
+- Corpus appends one line per finding; 0600; failure is a warning.
 - Default suite offline; Docker tests opt-in.
-- No "secure" claim anywhere.
+- No "secure" claim in the report.
