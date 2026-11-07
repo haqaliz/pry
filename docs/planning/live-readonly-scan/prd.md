@@ -1,6 +1,7 @@
 # PRD — Live Read-Only Scans
 
-- **Status:** Approved on standing instruction (2026-11-08)
+- **Status:** Merged to `master` (2026-11-08). Live read-only scans implemented; live
+  write-based checks, levels 1–2, P4, IDOR/DB, and hosted reports are deferred.
 - **Owner:** aliz
 - **Slug:** `live-readonly-scan`
 - **Capability:** P3/P5/P6 live read-only slice
