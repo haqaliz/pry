@@ -3,7 +3,7 @@
 - **Feature:** `floor-probes-real`
 - **Aspect:** `read-only-probes`
 - **PRD:** `../prd.md`
-- **Status:** Approved on standing instruction (2026-11-07)
+- **Status:** Implemented and merged (2026-11-07)
 
 ## Problem slice
 

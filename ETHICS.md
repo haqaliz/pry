@@ -1,7 +1,7 @@
 # Pry Ethics and Responsible Disclosure
 
-- **Status:** Draft for review. Must be approved before P3 probe code lands and before any
-  public finding.
+- **Status:** Approved (2026-11-07). Re-review before any public finding or change to the
+  probe suite or intensity levels.
 - **Owner:** aliz
 - **Last updated:** 2026-11-07
 

@@ -1,6 +1,8 @@
 # PRD — Floor Probes, For Real (P3)
 
-- **Status:** Draft, awaiting review gate (includes `ETHICS.md`)
+- **Status:** Merged to `master` (2026-11-07). First slice implemented: CORS with
+  credentials, verbose error leakage, exposed secret files. Missing auth/IDOR/DB rules, live
+  URL, and levels 1–2 remain deferred.
 - **Owner:** aliz
 - **Date:** 2026-11-07
 - **Slug:** `floor-probes-real`
