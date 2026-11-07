@@ -30,15 +30,15 @@ is offline; the manual owner-domain check remains.
 |---|---|---|
 | M1.1 | Floor probe suite (P3) | Missing auth, broken access control, exposed secrets, exposed DB/open rules, verbose errors, header/CORS checks — all read-only |
 | M1.2 | Proof capture (P5, read-only slice) | Every `EXPOSED` carries a saved, redacted, signed request/response bundle |
-| M1.3 | `pry scan <target>` CLI | Level 0 only; exit code reflects verdict; JSON output byte-stable |
+| M1.3 | `pry scan <target>` CLI | Level 0 only; local and live read-only; exit code reflects verdict; JSON output byte-stable |
 | M1.4 | First real finding on an app you own | Published as a case study, with ETHICS.md's disclosure process followed |
 
 Phase 1 status (2026-11-08): M1.1 partial — CORS with credentials, verbose error leakage,
 exposed secret files, and declared-protected endpoints returning 200 JSON without credentials
 are implemented for local repos. Endpoint discovery, IDOR/access control, exposed database
-rules, and header-only checks are not. M1.3 local `pry scan` works; URL scans remain
-`UNVERIFIED`. M1.2 is done for local findings — every `EXPOSED` writes an Ed25519-signed
-bundle; live replay remains P5. M1.4 is not started.
+rules, and header-only checks are not. M1.3 local and live read-only `pry scan` works; write/
+levels 1–2 remain. M1.2 is done for local and live read-only findings — every `EXPOSED` writes
+an Ed25519-signed bundle; live replay remains P5. M1.4 is not started.
 
 ## Phase 2: Intensity levels and live targets (weeks 8-12)
 
@@ -49,8 +49,9 @@ bundle; live replay remains P5. M1.4 is not started.
 | M2.3 | Level 2 write-based confirmation (P4) | Sandbox/staging only by default; live target requires an extra explicit step |
 | M2.4 | Findings corpus and report (P6) | Bank (target, probe, verdict, proof); local HTML report/corpus; hosted/public reports deferred |
 
-Phase 2 status (2026-11-08): M2.4 partial — local HTML report and JSONL corpus implemented;
-hosted/public reports, live targets, and levels 1–2 are not. M2.1–M2.3 not started.
+Phase 2 status (2026-11-08): M2.1 live read-only scan implemented with a P1 token; the
+real-domain manual check remains. M2.4 partial — local/live read-only HTML report and JSONL
+corpus implemented; hosted/public reports deferred. M2.2/M2.3 (levels 1–2) not started.
 
 ## Phase 3: Monetization experiment and platform integration (after the window)
 

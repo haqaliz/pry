@@ -45,6 +45,15 @@
 - Stop immediately if a check appears to touch shared data, trigger a real notification, or
   alter state. Report it as UNVERIFIED rather than continuing.
 
+## Live read-only scans
+
+- Require a P1 token for the target origin; validate it before any request.
+- GET only; no `Authorization`/`Cookie`; no writes; 4–6 requests.
+- Not a load test: levels 1–2, rate-limit probing, SSRF, and write-based checks are not
+  implemented.
+- The P1 token is the owner's authorization. If the target is shared or production, the owner
+  must confirm they control it.
+
 ## Responsible disclosure
 
 - If a finding affects real user data or a third party, stop and notify the app owner.

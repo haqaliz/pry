@@ -1,9 +1,10 @@
 # Pry: Architecture
 
 Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; P3
-read-only probes are implemented; P5 read-only signed bundles are implemented for local
-findings; P6 local report/corpus are implemented; live URL intake, authenticated probes, P4,
-hosted reports, and the rest of P5 are design intent.
+read-only probes are implemented; P5 read-only signed bundles are implemented for local and
+live read-only findings; P6 local report/corpus are implemented; live read-only scans are
+implemented; live write-based checks, authenticated probes, P4, hosted reports, and the rest
+of P5 are design intent.
 
 ## Pipeline
 
@@ -34,7 +35,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints); P4 adds gated checks
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints) + live read-only path; P4 adds gated checks
   proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
   cli/        pry scan | verify-ownership | intake | verify-proof | report
@@ -48,9 +49,12 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Local intake is a copied tree in Docker.** Only a temporary copy is mounted; the run
   container has no egress, no host socket, a non-root user, and resource limits. The snapshot
   pins what ran.
-- **Probes run from a sidecar on an internal network.** The app and the sidecar share a
+- **Local probes run from a sidecar on an internal network.** The app and the sidecar share a
   per-run Docker `--internal` network; the host runs the probes through `docker exec`. Neither
   container has egress. Secrets are redacted inside the sidecar before the host sees them.
+- **Live read-only scans run from the host after P1.** No sandbox; the token authorizes the
+  origin. GET-only, no credentials, 4–6 requests. The same probe functions and proof/report
+  path are used, so local and live cannot drift.
 - **The missing-auth probe only requests declared paths.** The owner supplies path-only
   declarations; absolute URLs and protocol-relative paths are rejected on the host and in the
   sidecar. The result quotes the declaration and the response, not a global auth conclusion.
@@ -61,12 +65,12 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
   the standard warning.
 - **Proof capture is minimal and redacted.** Only the bytes needed to demonstrate the finding are
   retained; anything beyond that is truncated or redacted before storage.
-- **Local findings are signed.** Every `EXPOSED` local finding gets an Ed25519 bundle over the
-  target snapshot and the redacted pair. The embedded key is tamper-evidence; fingerprint
-  pinning is the trust anchor. The signature is not a security verdict.
+- **Findings are signed.** Every `EXPOSED` local or live read-only finding gets an Ed25519
+  bundle over the target snapshot and the redacted pair. The embedded key is tamper-evidence;
+  fingerprint pinning is the trust anchor. The signature is not a security verdict.
 - **The report is a local view, not signed evidence.** It renders the run's snapshot/results,
-  verifies each proof, and escapes every dynamic value. The signed bundles remain the evidence;
-  no upload by default.
+  verifies each proof, and escapes every dynamic value. It works for local and live read-only
+  runs. The signed bundles remain the evidence; no upload by default.
 - **Determinism and replay.** Local findings get signed bundles; live replay and independent
   key distribution are future P5 work.
 - **UNVERIFIED causes** (draft): `OWNERSHIP_UNVERIFIED`, `TARGET_UNREACHABLE`,

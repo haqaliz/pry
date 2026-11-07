@@ -165,3 +165,26 @@ def test_capability_roadmap_p6_status():
 def test_architecture_p6_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
     assert "P6 local report/corpus" in text
+
+
+def test_readme_live_readonly_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Live Read-Only Scans" in text
+    assert "P1 token" in text
+    assert "GET-only" in text
+    assert "4–6" in text
+
+
+def test_claude_live_status():
+    text = " ".join(_read("CLAUDE.md").split())
+    assert "live read-only scans implemented" in text
+
+
+def test_capability_roadmap_live_status():
+    text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split())
+    assert "live read-only scans implemented" in text
+
+
+def test_architecture_live_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
+    assert "Live read-only scans run from the host" in text

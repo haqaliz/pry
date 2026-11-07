@@ -15,10 +15,11 @@ the data it should not have returned.
 P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor probes
 implemented (first slice + missing-auth declarations): CORS with credentials, verbose error
 leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
-credentials. P5 read-only signed proof bundles implemented for local EXPOSED findings. P6
-local findings report and corpus implemented. IDOR/access control, exposed database rules,
-live URL intake, hosted/public reports, and intensity levels 1–2 are not started. A clean P3
-result is `NOT_REPRODUCED`, never "secure."
+credentials. P5 read-only signed proof bundles implemented for local and live read-only
+EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans are
+implemented for URLs with a P1 token. IDOR/access control, exposed database rules, live
+write-based checks, hosted/public reports, and intensity levels 1–2 are not started. A clean
+P3 result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -86,8 +87,8 @@ Docker socket and no host filesystem mount beyond the temporary copy.
 
 `pry scan ./my-app` boots the local repo in the sandbox, runs the read-only floor probes,
 writes `results.json` beside the snapshot, and cleans up. A local path needs no ownership
-token: the user already has the files. A URL still requires the P1 token and remains
-`UNVERIFIED` because live probing is not implemented.
+token: the user already has the files. A URL requires the P1 token and runs the same read-only
+probes against the live origin.
 
 The first slice checks four classes:
 
@@ -117,11 +118,27 @@ The app and the probe sidecar share a per-run Docker internal network with no eg
 host runs probes through `docker exec` into the sidecar; no host port is published. Exit
 codes: 0 for no EXPOSED, 1 for any EXPOSED, 2 for usage/sandbox errors.
 
+## Live Read-Only Scans
+
+`pry scan https://example.com --token <token>` validates the P1 token for the target origin,
+then runs the same four read-only probes from the host. There is no Docker sandbox for a live
+target; the token is the authorization.
+
+- GET-only; no `Authorization`/`Cookie`; no writes; 4–6 requests.
+- CORS, verbose errors, exposed secret files, and declared `--endpoint` paths; same verdict
+  rules as a local scan.
+- Results are signed and reportable with `--report`.
+- A missing, invalid, or wrong-target token exits 2 before any request.
+- Rate-limit probing, SSRF, write-based checks, and levels 1–2 are not implemented.
+
+Live GETs are not zero-risk: a GET can trigger a webhook or cache. The user owns the target,
+and Pry keeps the request count minimal.
+
 ## Signed Proof Bundles (P5 read-only slice)
 
-Every `EXPOSED` local finding writes an Ed25519-signed bundle at
-`~/.pry/runs/<id>/proofs/<bundle_id>.json`. The bundle contains the target snapshot (commit,
-dirty state, tree hash, image digest, port) and the redacted request/response pair. The
+Every `EXPOSED` local or live read-only finding writes an Ed25519-signed bundle at
+`~/.pry/runs/<id>/proofs/<bundle_id>.json`. The bundle contains the target snapshot (local
+commit/tree/image or live URL/ownership proof) and the redacted request/response pair. The
 signature covers that payload; the bundle carries the public key and its fingerprint.
 
 ```bash
@@ -141,9 +158,10 @@ Live replay and key distribution are future work.
 ## Findings Report and Corpus (P6 read-only slice)
 
 `pry report RUN_DIR` or `pry scan ./app --report` writes a self-contained HTML report at
-`RUN_DIR/report.html` (0600). It shows the target, verdict counts, each finding's evidence and
-request/response, and each proof's fingerprint and VALID/INVALID status. The report is a local
-view; the signed bundles are the evidence, and the HTML itself is not signed.
+`RUN_DIR/report.html` (0600) from a local or live read-only run. It shows the target, verdict
+counts, each finding's evidence and request/response, and each proof's fingerprint and
+VALID/INVALID status. The report is a local view; the signed bundles are the evidence, and the
+HTML itself is not signed.
 
 The corpus appends one JSONL line per result to `~/.pry/corpus.jsonl` (`PRY_CORPUS` override),
 0600. A corpus write failure is a warning, not a scan failure.
@@ -161,10 +179,10 @@ pry report ~/.pry/runs/<id>
 Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
-2. **INTAKE** (Target intake) — P2 local sandbox implemented; live URL deferred
-3. **PROBE** (Security checks and exploitation) — P3 read-only first slice implemented
-4. **PROVE** (Proof capture) — P5 read-only signed bundles implemented for local findings
-5. **REPORT** (Findings presentation) — P6 local report/corpus implemented; hosted/public deferred
+2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
+3. **PROBE** (Security checks and exploitation) — P3 read-only first slice + live read-only
+4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
+5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
 ## Key Constraints
 
@@ -203,8 +221,8 @@ pry scan ./my-app
 # Declare protected paths for the missing-auth check
 pry scan ./my-app --endpoint /api/users --endpoint /api/admin
 
-# Scan a verified URL (live probes are not implemented yet)
-pry scan https://example.com --token <token>
+# Scan a verified URL with the read-only probes
+pry scan https://example.com --token <token> --report
 
 # Verify a signed proof bundle
 pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
@@ -233,10 +251,11 @@ Pry implements a strict ownership gate with:
    limits, and guaranteed cleanup.
 5. P3 local scans run read-only probes in an internal network with no egress; the sidecar
    redacts secret values before the host sees them.
-6. Every local `EXPOSED` result is an Ed25519-signed bundle; `verify-proof` checks the
-   signature and fingerprint.
-7. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence.
-8. Live URL scans still lead to `UNVERIFIED`, never a success verdict.
+6. Every local or live read-only `EXPOSED` result is an Ed25519-signed bundle; `verify-proof`
+   checks the signature and fingerprint.
+7. Live scans require a P1 token, are GET-only, send no credentials, and make 4–6 requests;
+   write-based checks and levels 1–2 are not implemented.
+8. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence.
 9. Absence of a reproduced finding is never reported as "secure".
 
 ## Contributing

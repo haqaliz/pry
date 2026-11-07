@@ -18,14 +18,14 @@ of an app: *does it actually hold, or does it give?*
 
 Status: **P1 ownership gate implemented; P2 local intake implemented; P3 read-only probes
 implemented (first slice + missing-auth declarations); P5 read-only signed proof bundles
-implemented for local EXPOSED findings; P6 local findings report and corpus implemented;
-IDOR/access control, exposed database rules, live URL intake, hosted/public reports, and
-intensity levels 1–2 not started.** The gate lives in `src/pry/own/`; the sandbox in
-`src/pry/intake/`; the probes in `src/pry/probe/`; the signed bundles in `src/pry/proof/`; the
-report in `src/pry/report/`. A local `pry scan --endpoint /path` sends an unauthenticated GET
-to a declared-protected path, signs every EXPOSED finding, and can write a local HTML report
-and JSONL corpus; a URL scan still reports `UNVERIFIED`. Do not describe capability that isn't
-there yet.
+implemented for local and live read-only EXPOSED findings; P6 local findings report and corpus
+implemented; live read-only scans implemented; IDOR/access control, exposed database rules,
+live write-based checks, hosted/public reports, and intensity levels 1–2 not started.** The
+gate lives in `src/pry/own/`; the sandbox in `src/pry/intake/`; the probes and live path in
+`src/pry/probe/`; the signed bundles in `src/pry/proof/`; the report in `src/pry/report/`. A
+local `pry scan --endpoint /path` sends an unauthenticated GET to a declared-protected path; a
+URL scan with a P1 token runs the same probes live and signs/reports the results. Do not
+describe capability that isn't there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed
