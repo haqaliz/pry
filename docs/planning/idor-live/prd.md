@@ -1,6 +1,7 @@
 # PRD — Configured IDOR Checks (Live)
 
-- **Status:** Approved on standing instruction (2026-11-08)
+- **Status:** Merged to `master` (2026-11-08). Configured live IDOR implemented; IDOR
+  discovery, local IDOR, exposed database rules, P4, and hosted reports are deferred.
 - **Owner:** aliz
 - **Slug:** `idor-live`
 - **Capability:** P3 remainder — IDOR/access control, live configured slice
