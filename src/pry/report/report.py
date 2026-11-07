@@ -345,7 +345,7 @@ bundles are the evidence; this HTML file is not signed.</p>
 <h2>What this report does not claim</h2>
 <p><strong>No secure verdict.</strong> Pry does not certify this app as secure. NOT_REPRODUCED means a suspected issue could not be confirmed; it is not proof of absence. Absence of a reproduced finding is not a guarantee of safety.</p>
 <p><strong>What VALID means.</strong> VALID means the bundle's embedded key verified the signature. It is tamper-evidence, not proof of who created it; pin the fingerprint to trust a signer.</p>
-<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR and access-control checks, exposed database rules, header-only findings, authenticated scans, write-based checks, and intensity levels 1-2 are not implemented in this read-only slice.</p>
+<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR discovery, local IDOR, exposed database rules, header-only findings, general authenticated scanning, write-based checks, and intensity levels 1-2 are not implemented in this read-only slice. A configured live IDOR check is available.</p>
 </section>
 <section>
 <h2>Target</h2>
