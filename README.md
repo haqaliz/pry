@@ -15,8 +15,9 @@ the data it should not have returned.
 P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor probes
 implemented (first slice + missing-auth declarations): CORS with credentials, verbose error
 leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
-credentials. IDOR/access control, exposed database rules, live URL intake, and intensity
-levels 1–2 are not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
+credentials. P5 read-only signed proof bundles implemented for local EXPOSED findings. IDOR/
+access control, exposed database rules, live URL intake, and intensity levels 1–2 are not
+started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -115,6 +116,27 @@ The app and the probe sidecar share a per-run Docker internal network with no eg
 host runs probes through `docker exec` into the sidecar; no host port is published. Exit
 codes: 0 for no EXPOSED, 1 for any EXPOSED, 2 for usage/sandbox errors.
 
+## Signed Proof Bundles (P5 read-only slice)
+
+Every `EXPOSED` local finding writes an Ed25519-signed bundle at
+`~/.pry/runs/<id>/proofs/<bundle_id>.json`. The bundle contains the target snapshot (commit,
+dirty state, tree hash, image digest, port) and the redacted request/response pair. The
+signature covers that payload; the bundle carries the public key and its fingerprint.
+
+```bash
+pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
+pry verify-proof <bundle> --fingerprint sha256:<your-key-fingerprint>
+```
+
+`verify-proof` prints `VALID`/`INVALID`, the fingerprint, and the finding. The proof key is
+`~/.pry/proof.key` (0600, `PRY_PROOF_KEY` override). `NOT_REPRODUCED` and `UNVERIFIED` are not
+signed.
+
+The signature proves the captured pair was not altered after signing, and that the signer
+held the private key. It does **not** prove the app is secure, and a bundle with an embedded
+key is not provenance on its own: pin the fingerprint out-of-band to trust a specific signer.
+Live replay and key distribution are future work.
+
 ## Architecture
 
 Pry's core architecture follows:
@@ -122,7 +144,7 @@ Pry's core architecture follows:
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live URL deferred
 3. **PROBE** (Security checks and exploitation) — P3 read-only first slice implemented
-4. **PROVE** (Proof capture)
+4. **PROVE** (Proof capture) — P5 read-only signed bundles implemented for local findings
 5. **REPORT** (Findings presentation)
 
 ## Key Constraints
@@ -164,6 +186,9 @@ pry scan ./my-app --endpoint /api/users --endpoint /api/admin
 
 # Scan a verified URL (live probes are not implemented yet)
 pry scan https://example.com --token <token>
+
+# Verify a signed proof bundle
+pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
 ```
 
 Docker integration tests are opt-in:
@@ -185,8 +210,10 @@ Pry implements a strict ownership gate with:
    limits, and guaranteed cleanup.
 5. P3 local scans run read-only probes in an internal network with no egress; the sidecar
    redacts secret values before the host sees them.
-6. Live URL scans still lead to `UNVERIFIED`, never a success verdict.
-7. Absence of a reproduced finding is never reported as "secure".
+6. Every local `EXPOSED` result is an Ed25519-signed bundle; `verify-proof` checks the
+   signature and fingerprint.
+7. Live URL scans still lead to `UNVERIFIED`, never a success verdict.
+8. Absence of a reproduced finding is never reported as "secure".
 
 ## Contributing
 

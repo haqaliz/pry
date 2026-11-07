@@ -119,3 +119,26 @@ def test_capability_roadmap_unauth_status():
 def test_architecture_unauth_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
     assert "declared unauth endpoints" in text
+
+
+def test_readme_p5_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Signed Proof Bundles (P5 read-only slice)" in text
+    assert "verify-proof" in text
+    assert "Ed25519" in text
+    assert "fingerprint" in text
+
+
+def test_claude_p5_status():
+    text = " ".join(_read("CLAUDE.md").split())
+    assert "P5 read-only signed proof bundles" in text
+
+
+def test_capability_roadmap_p5_status():
+    text = _read("docs/technical/CAPABILITY_ROADMAP.md")
+    assert "P5 read-only signed bundles" in text
+
+
+def test_architecture_p5_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
+    assert "P5 read-only signed bundles" in text

@@ -29,16 +29,16 @@ is offline; the manual owner-domain check remains.
 | # | Milestone | Done when |
 |---|---|---|
 | M1.1 | Floor probe suite (P3) | Missing auth, broken access control, exposed secrets, exposed DB/open rules, verbose errors, header/CORS checks — all read-only |
-| M1.2 | Proof capture (P5, read-only slice) | Every `EXPOSED` carries a saved, redacted request/response pair |
+| M1.2 | Proof capture (P5, read-only slice) | Every `EXPOSED` carries a saved, redacted, signed request/response bundle |
 | M1.3 | `pry scan <target>` CLI | Level 0 only; exit code reflects verdict; JSON output byte-stable |
 | M1.4 | First real finding on an app you own | Published as a case study, with ETHICS.md's disclosure process followed |
 
-Phase 1 status (2026-11-07): M1.1 partial — CORS with credentials, verbose error leakage,
+Phase 1 status (2026-11-08): M1.1 partial — CORS with credentials, verbose error leakage,
 exposed secret files, and declared-protected endpoints returning 200 JSON without credentials
 are implemented for local repos. Endpoint discovery, IDOR/access control, exposed database
 rules, and header-only checks are not. M1.3 local `pry scan` works; URL scans remain
-`UNVERIFIED`. M1.2 captures a redacted request/response pair, but the signed bundle is P5.
-M1.4 is not started.
+`UNVERIFIED`. M1.2 is done for local findings — every `EXPOSED` writes an Ed25519-signed
+bundle; live replay remains P5. M1.4 is not started.
 
 ## Phase 2: Intensity levels and live targets (weeks 8-12)
 

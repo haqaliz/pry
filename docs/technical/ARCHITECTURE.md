@@ -1,8 +1,8 @@
 # Pry: Architecture
 
 Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; P3
-read-only probes are implemented; live URL intake, authenticated probes, and P4 onward are
-design intent.
+read-only probes are implemented; P5 read-only signed bundles are implemented for local
+findings; live URL intake, authenticated probes, P4, and the rest of P5 are design intent.
 
 ## Pipeline
 
@@ -34,7 +34,7 @@ src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
   probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints); P4 adds gated checks
-  proof/      P5: request/response capture, redaction, signing
+  proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
   corpus/     P6: findings store, report generator
   cli/        pry scan | verify-ownership | report
 tests/        offline; fixture apps under local sandbox control; no real third-party targets
@@ -60,8 +60,11 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
   the standard warning.
 - **Proof capture is minimal and redacted.** Only the bytes needed to demonstrate the finding are
   retained; anything beyond that is truncated or redacted before storage.
-- **Determinism and replay.** A finding's proof bundle is signed and independently verifiable,
-  following the pattern Plumb uses for its bundles (not shared code — reimplemented standalone).
+- **Local findings are signed.** Every `EXPOSED` local finding gets an Ed25519 bundle over the
+  target snapshot and the redacted pair. The embedded key is tamper-evidence; fingerprint
+  pinning is the trust anchor. The signature is not a security verdict.
+- **Determinism and replay.** Local findings get signed bundles; live replay and independent
+  key distribution are future P5 work.
 - **UNVERIFIED causes** (draft): `OWNERSHIP_UNVERIFIED`, `TARGET_UNREACHABLE`,
   `INTENSITY_INSUFFICIENT`, `SANDBOX_BOOT_FAILED`, `PROBE_INCONCLUSIVE`.
 
