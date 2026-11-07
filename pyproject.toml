@@ -7,7 +7,10 @@ name = "pry"
 version = "0.1.0"
 description = "Pry - Proves an app you own is exposed by actually trying the exploit"
 requires-python = ">=3.9"
-dependencies = ["dnspython>=2.6,<3"]
+dependencies = [
+    "cryptography>=42,<47",
+    "dnspython>=2.6,<3",
+]
 
 [dependency-groups]
 dev = ["pytest>=7,<9"]
