@@ -47,7 +47,10 @@ bundle; live replay remains P5. M1.4 is not started.
 | M2.1 | Live-target ownership flow | DNS/file verification works against a real domain, not just local fixtures |
 | M2.2 | Level 1 expanded read-only checks (P4) | Non-mutating SSRF probes, rate-limit probing, with per-level confirmation |
 | M2.3 | Level 2 write-based confirmation (P4) | Sandbox/staging only by default; live target requires an extra explicit step |
-| M2.4 | Findings corpus and report (P6) | Bank (target, probe, verdict, proof); shareable report for the app owner |
+| M2.4 | Findings corpus and report (P6) | Bank (target, probe, verdict, proof); local HTML report/corpus; hosted/public reports deferred |
+
+Phase 2 status (2026-11-08): M2.4 partial — local HTML report and JSONL corpus implemented;
+hosted/public reports, live targets, and levels 1–2 are not. M2.1–M2.3 not started.
 
 ## Phase 3: Monetization experiment and platform integration (after the window)
 

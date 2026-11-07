@@ -142,3 +142,26 @@ def test_capability_roadmap_p5_status():
 def test_architecture_p5_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
     assert "P5 read-only signed bundles" in text
+
+
+def test_readme_p6_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Findings Report and Corpus (P6 read-only slice)" in text
+    assert "pry report" in text
+    assert "corpus" in text
+    assert "no upload" in text.lower()
+
+
+def test_claude_p6_status():
+    text = " ".join(_read("CLAUDE.md").split())
+    assert "P6 local findings report and corpus" in text
+
+
+def test_capability_roadmap_p6_status():
+    text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split())
+    assert "P6 local report/corpus" in text
+
+
+def test_architecture_p6_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split())
+    assert "P6 local report/corpus" in text

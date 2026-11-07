@@ -2,7 +2,8 @@
 
 Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; P3
 read-only probes are implemented; P5 read-only signed bundles are implemented for local
-findings; live URL intake, authenticated probes, P4, and the rest of P5 are design intent.
+findings; P6 local report/corpus are implemented; live URL intake, authenticated probes, P4,
+hosted reports, and the rest of P5 are design intent.
 
 ## Pipeline
 
@@ -35,8 +36,8 @@ src/pry/
   intake/     P2: local repo sandbox boot (live URL deferred)
   probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints); P4 adds gated checks
   proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
-  corpus/     P6: findings store, report generator
-  cli/        pry scan | verify-ownership | report
+  report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
+  cli/        pry scan | verify-ownership | intake | verify-proof | report
 tests/        offline; fixture apps under local sandbox control; no real third-party targets
 ```
 
@@ -63,6 +64,9 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Local findings are signed.** Every `EXPOSED` local finding gets an Ed25519 bundle over the
   target snapshot and the redacted pair. The embedded key is tamper-evidence; fingerprint
   pinning is the trust anchor. The signature is not a security verdict.
+- **The report is a local view, not signed evidence.** It renders the run's snapshot/results,
+  verifies each proof, and escapes every dynamic value. The signed bundles remain the evidence;
+  no upload by default.
 - **Determinism and replay.** Local findings get signed bundles; live replay and independent
   key distribution are future P5 work.
 - **UNVERIFIED causes** (draft): `OWNERSHIP_UNVERIFIED`, `TARGET_UNREACHABLE`,

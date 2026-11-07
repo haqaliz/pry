@@ -15,9 +15,10 @@ the data it should not have returned.
 P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor probes
 implemented (first slice + missing-auth declarations): CORS with credentials, verbose error
 leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
-credentials. P5 read-only signed proof bundles implemented for local EXPOSED findings. IDOR/
-access control, exposed database rules, live URL intake, and intensity levels 1–2 are not
-started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
+credentials. P5 read-only signed proof bundles implemented for local EXPOSED findings. P6
+local findings report and corpus implemented. IDOR/access control, exposed database rules,
+live URL intake, hosted/public reports, and intensity levels 1–2 are not started. A clean P3
+result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -137,6 +138,24 @@ held the private key. It does **not** prove the app is secure, and a bundle with
 key is not provenance on its own: pin the fingerprint out-of-band to trust a specific signer.
 Live replay and key distribution are future work.
 
+## Findings Report and Corpus (P6 read-only slice)
+
+`pry report RUN_DIR` or `pry scan ./app --report` writes a self-contained HTML report at
+`RUN_DIR/report.html` (0600). It shows the target, verdict counts, each finding's evidence and
+request/response, and each proof's fingerprint and VALID/INVALID status. The report is a local
+view; the signed bundles are the evidence, and the HTML itself is not signed.
+
+The corpus appends one JSONL line per result to `~/.pry/corpus.jsonl` (`PRY_CORPUS` override),
+0600. A corpus write failure is a warning, not a scan failure.
+
+Local only: no upload, no hosted link, no PDF/email. Every dynamic value is HTML-escaped, and
+there is no JavaScript or external asset. A safe report says `NOT_REPRODUCED`, never "secure."
+
+```bash
+pry scan ./my-app --report
+pry report ~/.pry/runs/<id>
+```
+
 ## Architecture
 
 Pry's core architecture follows:
@@ -145,7 +164,7 @@ Pry's core architecture follows:
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live URL deferred
 3. **PROBE** (Security checks and exploitation) — P3 read-only first slice implemented
 4. **PROVE** (Proof capture) — P5 read-only signed bundles implemented for local findings
-5. **REPORT** (Findings presentation)
+5. **REPORT** (Findings presentation) — P6 local report/corpus implemented; hosted/public deferred
 
 ## Key Constraints
 
@@ -189,6 +208,10 @@ pry scan https://example.com --token <token>
 
 # Verify a signed proof bundle
 pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
+
+# Generate a local HTML report
+pry scan ./my-app --report
+pry report ~/.pry/runs/<id>
 ```
 
 Docker integration tests are opt-in:
@@ -212,8 +235,9 @@ Pry implements a strict ownership gate with:
    redacts secret values before the host sees them.
 6. Every local `EXPOSED` result is an Ed25519-signed bundle; `verify-proof` checks the
    signature and fingerprint.
-7. Live URL scans still lead to `UNVERIFIED`, never a success verdict.
-8. Absence of a reproduced finding is never reported as "secure".
+7. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence.
+8. Live URL scans still lead to `UNVERIFIED`, never a success verdict.
+9. Absence of a reproduced finding is never reported as "secure".
 
 ## Contributing
 
