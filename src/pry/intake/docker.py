@@ -251,6 +251,33 @@ class DockerRunner:
             raise IntakeError(START_FAILED, "docker start returned no container id")
         return container_id
 
+    def start_callback_sidecar(
+        self,
+        network: str,
+        name: str,
+        source_dir,
+        image: str = "python:3.9-slim",
+        timeout: float = START_TIMEOUT,
+    ) -> str:
+        args = [
+            "run",
+            "-d",
+            "--name",
+            name,
+            "--network=%s" % network,
+            "--network-alias=pry-callback",
+        ]
+        args += self._security_args()
+        args += ["-v", "%s:/pry:ro" % source_dir]
+        args += [image, "python", "/pry/callback_server.py"]
+        result = self._checked(
+            args, timeout, START_FAILED, "start callback sidecar"
+        )
+        container_id = result.stdout.decode("utf-8", "replace").strip()
+        if not container_id:
+            raise IntakeError(START_FAILED, "docker start returned no container id")
+        return container_id
+
     def create_network(self, name: str, timeout: float = START_TIMEOUT) -> None:
         self._checked(
             ["network", "create", "--internal", name],

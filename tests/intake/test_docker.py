@@ -429,6 +429,52 @@ def test_start_sidecar_nonzero_is_start_failed(tmp_path):
     assert exc.value.cause == START_FAILED
 
 
+def test_start_callback_sidecar_mounts_the_probe_dir_read_only(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"callback123\n", b"", False)])
+    source_dir = tmp_path / "probe"
+
+    container = DockerRunner(runner=fake, uid=501, gid=20).start_callback_sidecar(
+        "pry-abc", "pry-callback-1", source_dir
+    )
+
+    assert container == "callback123"
+    argv, _ = fake.calls[0]
+    assert argv[:5] == ["docker", "run", "-d", "--name", "pry-callback-1"]
+    assert "--network=pry-abc" in argv
+    assert "--network-alias=pry-callback" in argv
+    assert "--network=none" not in argv
+    _pair(argv, "-v", "%s:/pry:ro" % source_dir)
+    _assert_security(argv)
+    assert argv[-3:] == ["python:3.9-slim", "python", "/pry/callback_server.py"]
+    assert "-p" not in argv
+    assert "-P" not in argv
+    for token in argv:
+        for forbidden in FORBIDDEN:
+            assert forbidden not in token, (forbidden, argv)
+
+
+def test_start_callback_sidecar_accepts_a_custom_image(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"callback123\n", b"", False)])
+
+    DockerRunner(runner=fake).start_callback_sidecar(
+        "pry-abc", "pry-callback-1", tmp_path, image="python:3.13-slim"
+    )
+
+    argv, _ = fake.calls[0]
+    assert argv[-3] == "python:3.13-slim"
+
+
+def test_start_callback_sidecar_without_an_id_is_start_failed(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"", b"", False)])
+
+    with pytest.raises(IntakeError) as exc:
+        DockerRunner(runner=fake).start_callback_sidecar(
+            "pry-abc", "pry-callback-1", tmp_path
+        )
+
+    assert exc.value.cause == START_FAILED
+
+
 def test_node_readiness_uses_fetch_and_any_http_response_is_ready():
     command = readiness_command("node", 3000)
 
