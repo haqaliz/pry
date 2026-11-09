@@ -69,12 +69,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         choices=[0, 1, 2],
-        help="Intensity level (only 0 is implemented)",
+        help="Intensity level (0 floor, 1 local SSRF; 2 not implemented)",
     )
     scan.add_argument(
         "--confirm",
         action="store_true",
-        help="Confirm higher-intensity actions (not usable yet)",
+        help="Explicit confirmation for level 1 expanded checks",
     )
     scan.add_argument("--json", action="store_true", help="Print JSON")
     scan.add_argument(
