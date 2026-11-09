@@ -682,6 +682,10 @@ def test_main_prints_an_invalid_endpoint_as_unverified_json(capsys):
         ["unauth", BASE, ENDPOINT, "/extra"],
         ["cors", BASE, ENDPOINT],
         ["idor", BASE, ENDPOINT],
+        ["rate_limit", BASE],
+        ["rate_limit", BASE, ENDPOINT],
+        ["rate_limit", BASE, ENDPOINT, "10", "/extra"],
+        ["rate_limit", BASE, ENDPOINT, "ten"],
     ],
 )
 def test_main_rejects_invalid_argv_for_the_new_probe(argv, capsys):
@@ -691,3 +695,43 @@ def test_main_rejects_invalid_argv_for_the_new_probe(argv, capsys):
     assert code == 2
     assert captured.out == ""
     assert "usage" in captured.err.lower()
+
+
+def test_main_accepts_rate_limit_with_a_count(capsys):
+    fetch = FakeFetch(*[_response(200) for _ in range(3)])
+
+    code = sidecar.main(
+        ["rate_limit", BASE, ENDPOINT, "3"],
+        fetch=fetch,
+        sleep=lambda _seconds: None,
+    )
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert captured.err == ""
+    assert captured.out.count("\n") == 1
+    payload = json.loads(captured.out)
+    assert payload["probe"] == "rate_limit"
+    assert payload["status"] == sidecar.OBSERVED
+    assert payload["count"] == 3
+    assert payload["statuses"] == [200, 200, 200]
+    assert len(fetch.calls) == 3
+
+
+def test_main_prints_a_rate_limit_transport_failure_as_unverified_json(capsys):
+    fetch = FakeFetch(
+        sidecar.TransportError(sidecar.REQUEST_TIMEOUT, "timed out")
+    )
+
+    code = sidecar.main(
+        ["rate_limit", BASE, ENDPOINT, "2"],
+        fetch=fetch,
+        sleep=lambda _seconds: None,
+    )
+    captured = capsys.readouterr()
+
+    assert code == 0
+    payload = json.loads(captured.out)
+    assert payload["status"] == sidecar.UNVERIFIED
+    assert "timed out" in payload["evidence"]
+    assert "Traceback" not in captured.err

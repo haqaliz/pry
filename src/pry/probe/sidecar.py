@@ -11,6 +11,7 @@ import json
 import re
 import socket
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -25,11 +26,19 @@ USER_AGENT = "pry/0.1"
 EXPOSED = "EXPOSED"
 NOT_REPRODUCED = "NOT_REPRODUCED"
 UNVERIFIED = "UNVERIFIED"
+OBSERVED = "OBSERVED"
+THROTTLED = "THROTTLED"
 
 TARGET_UNREACHABLE = "TARGET_UNREACHABLE"
 REQUEST_TIMEOUT = "REQUEST_TIMEOUT"
 REQUEST_FAILED = "REQUEST_FAILED"
 INVALID_ENDPOINT = "INVALID_ENDPOINT"
+INVALID_COUNT = "INVALID_COUNT"
+
+RATE_LIMIT = "rate_limit"
+RATE_LIMIT_MIN = 1
+RATE_LIMIT_MAX = 20
+RATE_LIMIT_SPACING = 0.1
 
 ERROR_PATH = "/__pry_missing__?id=%27"
 SECRET_PATHS = (
@@ -521,15 +530,142 @@ PROBES = {
 }
 
 
-def main(argv=None, fetch=None) -> int:
+def _rate_limit_observation(status, evidence, url, headers, response, count, statuses):
+    return {
+        "probe": RATE_LIMIT,
+        "status": status,
+        "evidence": evidence,
+        "request": _request("GET", url, headers),
+        "response": None
+        if response is None
+        else {
+            "status": response.status,
+            "headers": _headers(response.headers),
+            "body": (response.body or "")[:BODY_LIMIT],
+        },
+        "count": count,
+        "statuses": list(statuses),
+    }
+
+
+def probe_rate_limit(base_url, path, count, fetch=None, sleep=None) -> dict:
+    """Send up to ``count`` unauth GETs and observe throttling, never a verdict."""
+    fetch = fetch if fetch is not None else urllib_fetch
+    sleep = sleep if sleep is not None else time.sleep
+    headers = {"User-Agent": USER_AGENT}
+    if not _is_endpoint_path(path):
+        return _rate_limit_observation(
+            UNVERIFIED,
+            "%s: invalid endpoint path %r: not path-only"
+            % (INVALID_ENDPOINT, path),
+            path,
+            headers,
+            None,
+            0,
+            [],
+        )
+    if (
+        isinstance(count, bool)
+        or not isinstance(count, int)
+        or not RATE_LIMIT_MIN <= count <= RATE_LIMIT_MAX
+    ):
+        return _rate_limit_observation(
+            UNVERIFIED,
+            "%s: rate-limit count %r is not an integer %d..%d"
+            % (INVALID_COUNT, count, RATE_LIMIT_MIN, RATE_LIMIT_MAX),
+            base_url.rstrip("/") + path,
+            headers,
+            None,
+            0,
+            [],
+        )
+
+    url = base_url.rstrip("/") + path
+    statuses = []
+    response = None
+    for index in range(count):
+        attempt = index + 1
+        if index:
+            sleep(RATE_LIMIT_SPACING)
+        try:
+            response = fetch("GET", url, headers)
+        except TransportError as exc:
+            return _rate_limit_observation(
+                UNVERIFIED,
+                "transport failure at request %d/%d: %s"
+                % (attempt, count, exc.message or "request failed"),
+                url,
+                headers,
+                None,
+                attempt,
+                statuses,
+            )
+        statuses.append(response.status)
+        retry_after = _headers(response.headers).get("retry-after")
+        if response.status in (429, 503) or retry_after is not None:
+            evidence = "throttled at request %d/%d: status %d" % (
+                attempt,
+                count,
+                response.status,
+            )
+            if retry_after is not None:
+                evidence += " with Retry-After: %s" % retry_after
+            return _rate_limit_observation(
+                THROTTLED, evidence, url, headers, response, attempt, statuses
+            )
+        if not 200 <= response.status < 300:
+            return _rate_limit_observation(
+                UNVERIFIED,
+                "control request %d/%d returned status %d; the endpoint is "
+                "not usable for a rate-limit observation"
+                % (attempt, count, response.status),
+                url,
+                headers,
+                response,
+                attempt,
+                statuses,
+            )
+    return _rate_limit_observation(
+        OBSERVED,
+        "%d requests accepted without throttling (hardening observation)"
+        % count,
+        url,
+        headers,
+        response,
+        count,
+        statuses,
+    )
+
+
+def main(argv=None, fetch=None, sleep=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     usage = (
         "usage: sidecar.py {cors|errors|secrets} BASE_URL | "
-        "sidecar.py unauth BASE_URL PATH\n"
+        "sidecar.py unauth BASE_URL PATH | "
+        "sidecar.py rate_limit BASE_URL PATH COUNT\n"
     )
     if not args:
         sys.stderr.write(usage)
         return 2
+    if args[0] == "rate_limit":
+        if len(args) != 4:
+            sys.stderr.write(usage)
+            return 2
+        _, base_url, path, raw_count = args
+        try:
+            count = int(raw_count)
+        except ValueError:
+            sys.stderr.write(usage)
+            return 2
+        print(
+            json.dumps(
+                probe_rate_limit(
+                    base_url, path, count, fetch=fetch, sleep=sleep
+                ),
+                sort_keys=True,
+            )
+        )
+        return 0
     if args[0] == "unauth":
         if len(args) != 3:
             sys.stderr.write(usage)
