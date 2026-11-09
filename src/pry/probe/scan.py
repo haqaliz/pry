@@ -1,5 +1,6 @@
 """Scan a local repository in the sandbox and write results.json."""
 
+import json
 import secrets
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -18,6 +19,12 @@ from pry.probe.results import (
     summarize,
     write_results,
 )
+from pry.probe.ssrf import (
+    SSRF_PROBE_FAILED,
+    new_nonce,
+    parse_ssrf_result,
+    ssrf_failure,
+)
 from pry.proof import (
     PROOF_FAILED,
     ProofError,
@@ -32,6 +39,9 @@ from pry.report.corpus import ReportError, append_findings
 SCAN_VERSION = 1
 ENDPOINT_LIMIT = 2048
 INVALID_ENDPOINT = "INVALID_ENDPOINT"
+SSRF_PROBE_PATH = "/pry/ssrf_probe.py"
+SSRF_CALLBACK_BASE = "http://pry-callback:9000"
+SSRF_EXEC_TIMEOUT = 30
 
 
 @dataclass(frozen=True)
@@ -45,6 +55,63 @@ class ScanOutcome:
 
 def sidecar_script_path() -> Path:
     return Path(__file__).with_name("sidecar.py")
+
+
+def callback_source_dir() -> Path:
+    return Path(__file__).with_name("callback_server.py").parent
+
+
+def _probe_payload(result):
+    if result.timed_out:
+        raise ProbeError(
+            SSRF_PROBE_FAILED,
+            "ssrf probe timed out after %ss" % SSRF_EXEC_TIMEOUT,
+        )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).decode(
+            "utf-8", "replace"
+        ).strip()
+        raise ProbeError(
+            SSRF_PROBE_FAILED, detail[:500] or "exit code %d" % result.returncode
+        )
+    try:
+        return json.loads(result.stdout.decode("utf-8", "replace"))
+    except ValueError:
+        return None
+
+
+def _run_ssrf(runner, network, sandbox_id, app_base, config):
+    """Run the probe inside the callback sidecar and always remove it."""
+    callback = "pry-callback-" + sandbox_id
+    try:
+        runner.start_callback_sidecar(
+            network, callback, callback_source_dir()
+        )
+        nonce = new_nonce()
+        result = runner.exec(
+            callback,
+            [
+                "python",
+                SSRF_PROBE_PATH,
+                app_base,
+                config.endpoint,
+                config.parameter,
+                nonce,
+                SSRF_CALLBACK_BASE,
+            ],
+            timeout=SSRF_EXEC_TIMEOUT,
+        )
+        return parse_ssrf_result(_probe_payload(result), config)
+    except Exception as exc:
+        message = getattr(exc, "message", None) or str(exc) or "unknown error"
+        return ssrf_failure(
+            SSRF_PROBE_FAILED,
+            "ssrf probe failed: %s" % message[:500],
+            app_base,
+            config,
+        )
+    finally:
+        runner.remove(callback)
 
 
 def _validated_path(path) -> Path:
@@ -186,7 +253,14 @@ def finalize_results(run_dir, snapshot, results):
 
 
 def scan_local(
-    path, *, out=None, timeout=None, port=None, docker=None, endpoints=None
+    path,
+    *,
+    out=None,
+    timeout=None,
+    port=None,
+    docker=None,
+    endpoints=None,
+    ssrf_config=None,
 ):
     _validated_path(path)
     endpoints = validate_endpoints(endpoints)
@@ -197,15 +271,24 @@ def scan_local(
 
     def on_ready(handle: SandboxHandle) -> None:
         sidecar = "pry-probe-" + handle.sandbox_id
+        app_base = "http://app:%d" % handle.port
         failure = None
         try:
             runner.start_sidecar(network, sidecar, sidecar_script_path())
-            client = ProbeClient(
-                runner, sidecar, "http://app:%d" % handle.port
-            )
+            client = ProbeClient(runner, sidecar, app_base)
             results.extend(client.run_all())
             for endpoint in endpoints:
                 results.append(client.run("unauth", endpoint=endpoint))
+            if ssrf_config is not None:
+                results.append(
+                    _run_ssrf(
+                        runner,
+                        network,
+                        handle.sandbox_id,
+                        app_base,
+                        ssrf_config,
+                    )
+                )
         except BaseException as exc:
             failure = exc
             raise
