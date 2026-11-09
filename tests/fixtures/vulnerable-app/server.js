@@ -22,6 +22,25 @@ http
       return;
     }
 
+    if (req.url.startsWith("/api/fetch")) {
+      const target = new URL(req.url, "http://localhost").searchParams.get("url");
+      if (!target) {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("missing url\n");
+        return;
+      }
+      fetch(target)
+        .then(() => {
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          res.end("fetched\n");
+        })
+        .catch(() => {
+          res.writeHead(502, { "Content-Type": "text/plain" });
+          res.end("fetch failed\n");
+        });
+      return;
+    }
+
     if (req.url === "/.env") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end(
