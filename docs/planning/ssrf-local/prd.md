@@ -1,6 +1,7 @@
 # PRD — Local SSRF, Level 1 (P4 first slice)
 
-- **Status:** Draft, awaiting review gate
+- **Status:** Merged to `master` (2026-11-10). Local Level 1 SSRF implemented; rate-limit,
+  live SSRF, Level 2, and write-based checks are deferred.
 - **Owner:** aliz
 - **Slug:** `ssrf-local`
 - **Capability:** P4 Level 1, local SSRF
