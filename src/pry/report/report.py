@@ -47,6 +47,7 @@ class Report:
     created_at: Optional[str]
     counts: dict
     findings: List[Finding]
+    observations: List[dict]
 
 
 def _malformed(message: str) -> ReportError:
@@ -170,6 +171,13 @@ def load_run(run_dir) -> Report:
     created_at = data.get("created_at")
     if created_at is not None and not isinstance(created_at, str):
         raise _malformed("%s created_at must be a string" % RESULTS_FILE)
+    observations = data.get("observations", [])
+    if not isinstance(observations, list) or not all(
+        isinstance(entry, dict) for entry in observations
+    ):
+        raise _malformed(
+            "%s observations must be a list of objects" % RESULTS_FILE
+        )
 
     counts = {verdict: 0 for verdict in VERDICTS}
     findings = []
@@ -186,6 +194,7 @@ def load_run(run_dir) -> Report:
         created_at=created_at,
         counts=counts,
         findings=findings,
+        observations=observations,
     )
 
 
@@ -256,6 +265,44 @@ def _finding_html(finding: Finding) -> str:
             )
         )
     parts.append("<h3>Proof</h3>%s" % _proof_html(finding))
+    parts.append("</article>")
+    return "\n".join(parts)
+
+
+def _observation_html(observation) -> str:
+    if not isinstance(observation, dict):
+        return ""
+    request = observation.get("request") or {}
+    response = observation.get("response")
+    parts = [
+        "<article class=\"finding\">",
+        "<h2>%s <span class=\"verdict\">%s</span></h2>"
+        % (
+            _esc(observation.get("probe", "observation")),
+            _esc(observation.get("status", "")),
+        ),
+        "<p><strong>Hardening observation, not a verdict.</strong> It is not "
+        "signed and does not count as EXPOSED.</p>",
+        "<h3>Evidence</h3><pre>%s</pre>"
+        % _esc(observation.get("evidence", "")),
+        "<h3>Request</h3><p><code>%s</code> %s</p><pre>%s</pre>"
+        % (
+            _esc(request.get("method", "GET")),
+            _esc(request.get("url", "")),
+            _esc(_headers_text(request.get("headers"))),
+        ),
+    ]
+    if response is None:
+        parts.append("<h3>Response</h3><p>No response captured.</p>")
+    else:
+        parts.append(
+            "<h3>Response</h3><p>Status: %s</p><pre>%s</pre><pre>%s</pre>"
+            % (
+                _esc(response.get("status")),
+                _esc(_headers_text(response.get("headers"))),
+                _esc(response.get("body")),
+            )
+        )
     parts.append("</article>")
     return "\n".join(parts)
 
@@ -345,7 +392,7 @@ bundles are the evidence; this HTML file is not signed.</p>
 <h2>What this report does not claim</h2>
 <p><strong>No secure verdict.</strong> Pry does not certify this app as secure. NOT_REPRODUCED means a suspected issue could not be confirmed; it is not proof of absence. Absence of a reproduced finding is not a guarantee of safety.</p>
 <p><strong>What VALID means.</strong> VALID means the bundle's embedded key verified the signature. It is tamper-evidence, not proof of who created it; pin the fingerprint to trust a signer.</p>
-<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR discovery, local IDOR, exposed database rules, header-only findings, general authenticated scanning, write-based checks, live SSRF, rate-limit probing, and Level 2 are not implemented. A configured live IDOR check and local Level 1 SSRF are available.</p>
+<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR discovery, local IDOR, exposed database rules, header-only findings, general authenticated scanning, write-based checks, live SSRF, live rate-limit probing, and Level 2 are not implemented. A configured live IDOR check, local Level 1 SSRF, and a bounded local rate-limit observation are available.</p>
 </section>
 <section>
 <h2>Target</h2>
@@ -354,6 +401,11 @@ bundles are the evidence; this HTML file is not signed.</p>
 <section>
 <h2>Counts</h2>
 {counts}
+</section>
+<section>
+<h2>Observations</h2>
+<p class="lede">Hardening observations are not verdicts and are not signed.</p>
+{observations}
 </section>
 <section>
 <h2>Findings</h2>
@@ -367,6 +419,10 @@ signed evidence.</footer>
         title=_esc(basename),
         target=_target_html(report),
         counts=_counts_html(report),
+        observations="\n".join(
+            _observation_html(entry) for entry in report.observations
+        )
+        or "<p>No hardening observations were recorded.</p>",
         findings=findings,
     )
 

@@ -318,6 +318,38 @@ def test_render_html_contains_target_counts_findings_and_caveats(tmp_path):
         assert value in html
 
 
+def test_render_html_shows_observations_and_escapes_them(tmp_path):
+    run_dir = _write_run(tmp_path, [_entry("cors", NOT_REPRODUCED)])
+    data = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
+    data["observations"] = [
+        {
+            "probe": "rate_limit",
+            "status": "OBSERVED",
+            "evidence": "<script>alert(1)</script> no throttling seen",
+            "request": {
+                "method": "GET",
+                "url": "http://app:8000/login",
+                "headers": {},
+            },
+            "response": {"status": 200, "headers": {}, "body": "ok"},
+            "count": 10,
+            "statuses": [200] * 10,
+        }
+    ]
+    (run_dir / "results.json").write_text(
+        json.dumps(data), encoding="utf-8"
+    )
+
+    html = render_html(load_run(run_dir))
+
+    assert "Observations" in html
+    assert "rate_limit" in html
+    assert "OBSERVED" in html
+    assert "not a verdict" in html
+    assert "<script" not in html.lower()
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
 def test_render_html_escapes_scripts_in_evidence_body_and_headers(tmp_path):
     payload = "<script>alert(1)</script>"
     entry = _entry(
