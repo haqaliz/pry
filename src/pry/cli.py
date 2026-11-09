@@ -25,10 +25,16 @@ from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
 from pry.probe.idor import load_idor_config
 from pry.probe.live import scan_live
 from pry.probe.scan import scan_local, validate_endpoints
+from pry.probe.ssrf import validate_ssrf
 from pry.proof import ProofError, load_bundle, verify_bundle
 from pry.report import ReportError, load_run, write_report
 
 _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHOD}
+
+CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
+SSRF_CONFIG_REQUIRED = "SSRF_CONFIG_REQUIRED"
+SSRF_REQUIRES_LEVEL1 = "SSRF_REQUIRES_LEVEL1"
+SSRF_REQUIRES_LOCAL_LEVEL1 = "SSRF_REQUIRES_LOCAL_LEVEL1"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -91,6 +97,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--idor-config",
         metavar="FILE",
         help="0600 JSON config with two identities and two object paths (live only)",
+    )
+    scan.add_argument(
+        "--ssrf-endpoint",
+        metavar="PATH",
+        help="Declared fetch endpoint for the local level 1 SSRF check",
+    )
+    scan.add_argument(
+        "--ssrf-parameter",
+        metavar="NAME",
+        help="Query parameter that takes the callback URL",
     )
     scan.add_argument(
         "--report",
@@ -352,9 +368,43 @@ def _scan_target_path(args) -> int:
         )
         return 2
 
-    if args.level != 0:
+    if args.level == 2:
         _print_error(
-            OwnershipError(INTENSITY_INSUFFICIENT, "only level 0 is implemented")
+            OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented")
+        )
+        return 2
+
+    ssrf_config = None
+    if args.level == 1:
+        if not args.confirm:
+            _print_error(
+                ProbeError(
+                    CONFIRMATION_REQUIRED,
+                    "level 1 is expanded read-only work and requires --confirm",
+                )
+            )
+            return 2
+        if args.ssrf_endpoint is None or args.ssrf_parameter is None:
+            _print_error(
+                ProbeError(
+                    SSRF_CONFIG_REQUIRED,
+                    "level 1 requires --ssrf-endpoint and --ssrf-parameter",
+                )
+            )
+            return 2
+        try:
+            ssrf_config = validate_ssrf(
+                args.ssrf_endpoint, args.ssrf_parameter
+            )
+        except ProbeError as exc:
+            _print_error(exc)
+            return 2
+    elif args.ssrf_endpoint is not None or args.ssrf_parameter is not None:
+        _print_error(
+            ProbeError(
+                SSRF_REQUIRES_LEVEL1,
+                "SSRF checks require --level 1 and --confirm on a local path",
+            )
         )
         return 2
 
@@ -364,14 +414,16 @@ def _scan_target_path(args) -> int:
         _print_error(exc)
         return 2
 
+    kwargs = {
+        "out": args.out,
+        "timeout": args.timeout,
+        "port": args.port,
+        "endpoints": endpoints,
+    }
+    if ssrf_config is not None:
+        kwargs["ssrf_config"] = ssrf_config
     try:
-        outcome = scan_local(
-            args.target,
-            out=args.out,
-            timeout=args.timeout,
-            port=args.port,
-            endpoints=endpoints,
-        )
+        outcome = scan_local(args.target, **kwargs)
     except (IntakeError, ProbeError, ProofError) as exc:
         _print_error(exc)
         return 2
@@ -380,9 +432,24 @@ def _scan_target_path(args) -> int:
 
 
 def _scan_target_url(args) -> int:
+    if (
+        args.level == 1
+        or args.ssrf_endpoint is not None
+        or args.ssrf_parameter is not None
+    ):
+        _print_error(
+            ProbeError(
+                SSRF_REQUIRES_LOCAL_LEVEL1,
+                "SSRF checks run only against a local path at level 1; "
+                "live SSRF is not implemented",
+            ),
+            args.json,
+        )
+        return 2
+
     if args.level != 0:
         _print_error(
-            OwnershipError(INTENSITY_INSUFFICIENT, "only level 0 is implemented"),
+            OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented"),
             args.json,
         )
         return 2

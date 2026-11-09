@@ -225,12 +225,11 @@ def test_missing_local_path_is_unverified(monkeypatch, capsys):
     assert fake.calls[0][0] == "./nope"
 
 
-@pytest.mark.parametrize("level", ["1", "2"])
-def test_local_scan_rejects_higher_intensity(repo, tmp_path, monkeypatch, capsys, level):
+def test_local_scan_rejects_level_two(repo, tmp_path, monkeypatch, capsys):
     fake = FakeScanLocal(_outcome(tmp_path, [NOT_REPRODUCED] * 3))
     monkeypatch.setattr("pry.cli.scan_local", fake)
 
-    assert main(["scan", str(repo), "--level", level]) == 2
+    assert main(["scan", str(repo), "--level", "2"]) == 2
     assert fake.calls == []
     assert "UNVERIFIED: INTENSITY_INSUFFICIENT" in capsys.readouterr().out
 

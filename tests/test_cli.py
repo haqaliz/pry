@@ -171,15 +171,21 @@ def test_scan_valid_token_calls_scan_live(tmp_path, monkeypatch):
     assert seen == [(TARGET, token)]
 
 
-@pytest.mark.parametrize("level", ["1", "2"])
-def test_scan_rejects_higher_intensity(level, monkeypatch, capsys):
+@pytest.mark.parametrize(
+    "level,cause",
+    [
+        ("1", "SSRF_REQUIRES_LOCAL_LEVEL1"),
+        ("2", "INTENSITY_INSUFFICIENT"),
+    ],
+)
+def test_scan_rejects_higher_intensity(level, cause, monkeypatch, capsys):
     token = _token()
     called = []
     monkeypatch.setattr("pry.cli.scan_live", lambda *a, **k: called.append(a) or 0)
 
     assert main(["scan", TARGET, "--token", token, "--level", level]) == 2
     assert called == []
-    assert "INTENSITY_INSUFFICIENT" in capsys.readouterr().out
+    assert cause in capsys.readouterr().out
 
 
 def test_scan_reads_token_file(tmp_path, monkeypatch):
@@ -233,7 +239,10 @@ def test_scan_help_lists_local_scan_flags(capsys):
         "--port",
         "--token",
         "--level",
+        "--confirm",
         "--endpoint",
+        "--ssrf-endpoint",
+        "--ssrf-parameter",
     ):
         assert flag in out
 
