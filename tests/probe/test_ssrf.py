@@ -95,6 +95,8 @@ def test_validate_ssrf_accepts_a_path_and_a_token_parameter():
         "//evil.invalid",
         "api/fetch",
         "/api fetch",
+        "/api/fetch?x=1",
+        "/api/fetch#frag",
         "",
         "/" + "a" * 2048,
     ],

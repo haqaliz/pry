@@ -53,6 +53,11 @@ def validate_ssrf(endpoint, parameter) -> SsrfConfig:
         raise ProbeError(
             SSRF_CONFIG_INVALID, "invalid ssrf endpoint: %s" % exc.message
         ) from exc
+    if "?" in endpoint or "#" in endpoint:
+        raise ProbeError(
+            SSRF_CONFIG_INVALID,
+            "invalid ssrf endpoint: must not include a query or fragment",
+        )
     if not isinstance(parameter, str) or not _PARAMETER.match(parameter):
         raise ProbeError(
             SSRF_CONFIG_INVALID,
