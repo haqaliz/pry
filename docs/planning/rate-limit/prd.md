@@ -1,6 +1,7 @@
 # PRD — Rate-Limit Observation (P4 Level 1, local)
 
-- **Status:** Draft, awaiting review gate
+- **Status:** Merged to `master` (2026-11-10). Local rate-limit observation implemented;
+  live rate-limit, live SSRF, Level 2, and writes are deferred.
 - **Owner:** aliz
 - **Slug:** `rate-limit`
 - **Capability:** P4 Level 1, local rate-limit observation

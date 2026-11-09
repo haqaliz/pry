@@ -3,7 +3,7 @@
 - **Feature:** `rate-limit`
 - **Aspect:** `local-rate-limit`
 - **PRD:** `../prd.md`
-- **Status:** Approved (2026-11-10)
+- **Status:** Implemented and merged (2026-11-10)
 
 ## Problem slice
 
