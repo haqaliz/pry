@@ -17,9 +17,10 @@ implemented (first slice + missing-auth declarations): CORS with credentials, ve
 leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
 credentials. P5 read-only signed proof bundles implemented for local and live read-only
 EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans and
-configured live IDOR checks are implemented for URLs with a P1 token. IDOR discovery, local
-IDOR, exposed database rules, live write-based checks, hosted/public reports, and intensity
-levels 1–2 are not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
+configured live IDOR checks are implemented for URLs with a P1 token. Local Level 1 SSRF is
+implemented with `--confirm` and a callback sidecar. IDOR discovery, local IDOR, exposed
+database rules, live write-based checks, live SSRF, rate-limit probing, Level 2, and
+hosted/public reports are not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -164,6 +165,26 @@ The config path and credentials never appear in results, proofs, reports, or err
 
 No discovery and no local IDOR in this slice. A local path with `--idor-config` exits 2.
 
+## Local SSRF (Level 1)
+
+```bash
+pry scan ./my-app --level 1 --confirm \
+  --ssrf-endpoint /api/fetch --ssrf-parameter url
+```
+
+Level 1 is expanded read-only work and requires `--confirm` for each run. The app stays in
+the local sandbox. A callback sidecar joins the sandbox internal network as `pry-callback`;
+Pry sends the declared endpoint a callback URL with a per-run nonce, and the app fetches it.
+`EXPOSED` only when the callback records the nonce. The app responding without a hit is
+`NOT_REPRODUCED`; a transport or callback-control failure is `UNVERIFIED`.
+
+- GET query parameter only; no POST/body/header injection.
+- The callback hit proves the app fetched an internal callback URL. It does **not** prove
+  arbitrary external egress.
+- No live SSRF (needs a public callback), no rate-limit probing, no Level 2/write checks.
+- Missing `--confirm`, level 2, SSRF flags at level 0, or a URL with SSRF flags → exit 2.
+- The callback sidecar has no egress and no host port; it is removed with the sandbox.
+
 ## Signed Proof Bundles (P5 read-only slice)
 
 Every `EXPOSED` local or live read-only finding writes an Ed25519-signed bundle at
@@ -210,7 +231,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only first slice + live read-only + configured IDOR
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + configured IDOR; P4 Level 1 local SSRF
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -257,6 +278,10 @@ pry scan https://example.com --token <token> --report
 # Configured live IDOR (config must be 0600)
 pry scan https://example.com --token <token> --idor-config idor.json
 
+# Local Level 1 SSRF (requires explicit confirmation)
+pry scan ./my-app --level 1 --confirm \
+  --ssrf-endpoint /api/fetch --ssrf-parameter url
+
 # Verify a signed proof bundle
 pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
 
@@ -288,10 +313,12 @@ Pry implements a strict ownership gate with:
    checks the signature and fingerprint.
 7. Live scans require a P1 token, are GET-only, send no credentials, and make 4–6 requests;
    configured IDOR adds the credentials from a 0600 file to its three requests only. Stored
-   headers redact auth/cookie/API-key values; write-based checks and levels 1–2 are not
-   implemented.
-8. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence.
-9. Absence of a reproduced finding is never reported as "secure".
+   headers redact auth/cookie/API-key values.
+8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is
+   the only EXPOSED condition. Live SSRF, rate-limit probing, Level 2, and write-based checks
+   are not implemented.
+9. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence.
+10. Absence of a reproduced finding is never reported as "secure".
 
 ## Contributing
 

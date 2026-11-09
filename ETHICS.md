@@ -39,6 +39,8 @@
 
 - Level 0 is read-only and always on: GET/HEAD-style checks only.
 - Level 1 is expanded read-only work and requires explicit per-target confirmation.
+- Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress. A callback hit
+  proves the app fetched an internal URL, not arbitrary external egress. No live SSRF.
 - Level 2 is write-based confirmation. It runs only against a sandbox or staging copy by
   default. Against a live target it needs an additional explicit confirmation beyond the
   standard warning.
@@ -49,8 +51,8 @@
 
 - Require a P1 token for the target origin; validate it before any request.
 - GET only; no `Authorization`/`Cookie`; no writes; 4–6 requests.
-- Not a load test: levels 1–2, rate-limit probing, SSRF, and write-based checks are not
-  implemented.
+- Not a load test: live SSRF, rate-limit probing, Level 2, and write-based checks are not
+  implemented. Local Level 1 SSRF is separate and requires `--confirm`.
 - The P1 token is the owner's authorization. If the target is shared or production, the owner
   must confirm they control it.
 - Configured IDOR credentials come from a 0600 file, are used only for the three requests, and
