@@ -220,6 +220,7 @@ def test_live_scan_json_includes_results_and_report(
     assert set(data) == {
         "snapshot",
         "results",
+        "observations",
         "summary",
         "results_path",
         "report",

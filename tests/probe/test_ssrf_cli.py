@@ -283,7 +283,6 @@ def test_level1_without_confirm_reports_confirmation_before_config(
 @pytest.mark.parametrize(
     "extra",
     [
-        [],
         ["--ssrf-endpoint", "/api/fetch"],
         ["--ssrf-parameter", "url"],
     ],
@@ -371,7 +370,7 @@ def test_a_url_refuses_level1_or_ssrf_flags(monkeypatch, capsys, extra):
     )
 
     assert code == 2
-    assert "SSRF_REQUIRES_LOCAL_LEVEL1" in out
+    assert "LEVEL1_REQUIRES_LOCAL" in out
     assert local.calls == []
     assert live.calls == []
 

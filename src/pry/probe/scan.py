@@ -2,7 +2,7 @@
 
 import json
 import secrets
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -51,6 +51,7 @@ class ScanOutcome:
     results_path: Path
     summary: dict
     corpus_error: Optional[str] = None
+    observations: list = field(default_factory=list)
 
 
 def sidecar_script_path() -> Path:
@@ -223,10 +224,11 @@ def _sign_exposed(run_dir, snapshot, results):
         ) from exc
 
 
-def finalize_results(run_dir, snapshot, results):
+def finalize_results(run_dir, snapshot, results, observations=None):
     """Sign, summarize, write results.json, and bank the corpus for one run.
 
-    Shared by the local and live paths so they cannot drift.
+    Shared by the local and live paths so they cannot drift. Observations are
+    hardening evidence: they are written beside the results, never signed.
     """
     results = _sign_exposed(run_dir, snapshot, results)
     summary = summarize(results)
@@ -240,6 +242,7 @@ def finalize_results(run_dir, snapshot, results):
         results=results,
         summary=summary,
         created_at=utc_now(),
+        observations=list(observations or []),
     )
     results_path = write_results(run_dir, asdict(scan_result))
     corpus_error = None
@@ -261,12 +264,14 @@ def scan_local(
     docker=None,
     endpoints=None,
     ssrf_config=None,
+    rate_limit_config=None,
 ):
     _validated_path(path)
     endpoints = validate_endpoints(endpoints)
     runner = docker if docker is not None else DockerRunner()
     network = "pry-net-" + secrets.token_hex(6)
     results = []
+    observations = []
     corpus_error = None
 
     def on_ready(handle: SandboxHandle) -> None:
@@ -287,6 +292,12 @@ def scan_local(
                         handle.sandbox_id,
                         app_base,
                         ssrf_config,
+                    )
+                )
+            if rate_limit_config is not None:
+                observations.append(
+                    client.run_rate_limit(
+                        rate_limit_config.endpoint, rate_limit_config.count
                     )
                 )
         except BaseException as exc:
@@ -313,7 +324,7 @@ def scan_local(
         )
         run_dir = Path(intake_result.snapshot_path).parent
         results, summary, results_path, corpus_error = finalize_results(
-            run_dir, intake_result.snapshot, results
+            run_dir, intake_result.snapshot, results, observations
         )
     except BaseException as exc:
         failure = exc
@@ -331,4 +342,5 @@ def scan_local(
         results_path=results_path,
         summary=summary,
         corpus_error=corpus_error,
+        observations=observations,
     )

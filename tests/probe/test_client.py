@@ -14,9 +14,11 @@ from pry.probe.client import (
     EXEC_TIMEOUT,
     INVALID_RESULT,
     PROBE_ORDER,
+    RATE_LIMIT_TIMEOUT,
     UNKNOWN_VERDICT,
     ProbeClient,
 )
+from pry.probe.rate_limit import OBSERVED, THROTTLED
 from pry.probe.results import EXPOSED, UNVERIFIED, ProbeResult
 
 BASE = "http://app:3000"
@@ -242,3 +244,125 @@ def test_the_sidecars_invalid_endpoint_cause_is_carried_through():
     assert result.verdict == UNVERIFIED
     assert result.cause == "INVALID_ENDPOINT"
     assert result.response is None
+
+
+RATE_PATH = "/api/ping"
+
+
+def _observation(status=OBSERVED, count=10):
+    return {
+        "probe": "rate_limit",
+        "status": status,
+        "evidence": "10 requests accepted without throttling "
+        "(hardening observation)",
+        "request": {
+            "method": "GET",
+            "url": BASE + RATE_PATH,
+            "headers": {"User-Agent": "pry/0.1"},
+        },
+        "response": {"status": 200, "headers": {}, "body": "ok"},
+        "count": count,
+        "statuses": [200] * count,
+    }
+
+
+def test_run_rate_limit_execs_the_sidecar_with_the_count():
+    fake = FakeDocker([_json(_observation())])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_rate_limit(RATE_PATH, 10)
+
+    assert fake.calls == [
+        (
+            SIDECAR,
+            [
+                "python",
+                "/pry/sidecar.py",
+                "rate_limit",
+                BASE,
+                RATE_PATH,
+                "10",
+            ],
+            RATE_LIMIT_TIMEOUT,
+        )
+    ]
+    assert RATE_LIMIT_TIMEOUT == 120
+    assert result["probe"] == "rate_limit"
+    assert result["status"] == OBSERVED
+    assert result["count"] == 10
+    assert result["statuses"] == [200] * 10
+    assert result["request"]["headers"] == {"user-agent": "pry/0.1"}
+
+
+def test_run_rate_limit_keeps_a_throttled_observation():
+    payload = _observation(THROTTLED, 4)
+    payload["statuses"] = [200, 200, 200, 429]
+    payload["evidence"] = "throttled at request 4/10: status 429"
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_rate_limit(RATE_PATH, 10)
+
+    assert result["status"] == THROTTLED
+    assert result["count"] == 4
+    assert result["statuses"] == [200, 200, 200, 429]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        CommandResult(1, b"", b"sidecar exploded", False),
+        CommandResult(125, b"", b"", False),
+    ],
+)
+def test_a_rate_limit_nonzero_exit_is_an_unverified_observation(command):
+    result = ProbeClient(FakeDocker([command]), SIDECAR, BASE).run_rate_limit(
+        RATE_PATH, 10
+    )
+
+    assert result["probe"] == "rate_limit"
+    assert result["status"] == UNVERIFIED
+    assert result["count"] == 0
+    assert result["statuses"] == []
+    assert result["response"] is None
+    assert EXEC_FAILED in result["evidence"]
+
+
+def test_a_rate_limit_timeout_is_an_unverified_observation():
+    fake = FakeDocker([CommandResult(-1, b"", b"", True)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_rate_limit(RATE_PATH, 10)
+
+    assert result["status"] == UNVERIFIED
+    assert EXEC_TIMEOUT in result["evidence"]
+    assert result["response"] is None
+
+
+@pytest.mark.parametrize("stdout", [b"not json", b"", b"[1, 2]"])
+def test_invalid_rate_limit_json_is_an_unverified_observation(stdout):
+    fake = FakeDocker([CommandResult(0, stdout, b"", False)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_rate_limit(RATE_PATH, 10)
+
+    assert result["status"] == UNVERIFIED
+    assert INVALID_RESULT in result["evidence"]
+    assert result["response"] is None
+
+
+def test_a_rate_limit_docker_exception_is_unverified_and_does_not_escape():
+    fake = FakeDocker([RuntimeError("docker exec exploded")])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_rate_limit(RATE_PATH, 10)
+
+    assert result["status"] == UNVERIFIED
+    assert EXEC_FAILED in result["evidence"]
+    assert "docker exec exploded" in result["evidence"]
+
+
+def test_a_rate_limit_payload_that_tries_to_carry_a_verdict_is_unverified():
+    payload = dict(_observation(), verdict=EXPOSED)
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_rate_limit(RATE_PATH, 10)
+
+    assert result["status"] == UNVERIFIED
+    assert "RATE_LIMIT_PROBE_INVALID" in result["evidence"]
+    assert "verdict" not in result

@@ -177,12 +177,14 @@ def test_scan_result_has_exactly_the_contract_fields():
         "results",
         "summary",
         "created_at",
+        "observations",
     ]
     assert scan.version == 1
     assert scan.target["sandbox_id"] == "pry-0123456789ab"
     assert len(scan.results) == 2
     assert scan.summary[EXPOSED] == 1
     assert scan.created_at.endswith("Z")
+    assert scan.observations == []
 
 
 def test_summarize_counts_every_verdict():

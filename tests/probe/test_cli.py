@@ -162,7 +162,13 @@ def test_local_scan_json_prints_the_full_result(repo, tmp_path, monkeypatch, cap
     assert main(["scan", str(repo), "--json"]) == 1
 
     data = json.loads(capsys.readouterr().out)
-    assert set(data) == {"snapshot", "results", "summary", "results_path"}
+    assert set(data) == {
+        "snapshot",
+        "results",
+        "observations",
+        "summary",
+        "results_path",
+    }
     assert data["snapshot"]["sandbox_id"] == "pry-abc123"
     assert data["results_path"] == str(tmp_path / "run" / "results.json")
     assert [entry["probe"] for entry in data["results"]] == list(PROBES)

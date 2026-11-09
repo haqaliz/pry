@@ -174,7 +174,7 @@ def test_scan_valid_token_calls_scan_live(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "level,cause",
     [
-        ("1", "SSRF_REQUIRES_LOCAL_LEVEL1"),
+        ("1", "LEVEL1_REQUIRES_LOCAL"),
         ("2", "INTENSITY_INSUFFICIENT"),
     ],
 )
@@ -243,6 +243,8 @@ def test_scan_help_lists_local_scan_flags(capsys):
         "--endpoint",
         "--ssrf-endpoint",
         "--ssrf-parameter",
+        "--rate-limit-endpoint",
+        "--rate-limit-count",
     ):
         assert flag in out
 

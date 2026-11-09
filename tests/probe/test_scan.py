@@ -309,7 +309,15 @@ def test_scan_writes_results_json_beside_the_snapshot(repo, tmp_path, monkeypatc
     assert outcome.results_path == tmp_path / "run" / "results.json"
     assert stat.S_IMODE(outcome.results_path.stat().st_mode) == 0o600
     data = json.loads(outcome.results_path.read_text())
-    assert set(data) == {"version", "target", "results", "summary", "created_at"}
+    assert set(data) == {
+        "version",
+        "target",
+        "results",
+        "summary",
+        "observations",
+        "created_at",
+    }
+    assert data["observations"] == []
     assert data["version"] == 1
     assert data["target"] == {
         "sandbox_id": SANDBOX_ID,

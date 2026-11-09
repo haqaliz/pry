@@ -209,7 +209,14 @@ def test_scan_live_runs_the_shared_probes_and_signs_exposed_findings(
     assert payload["finding"]["verdict"] == EXPOSED
 
     data = json.loads(outcome.results_path.read_text(encoding="utf-8"))
-    assert set(data) == {"version", "target", "results", "summary", "created_at"}
+    assert set(data) == {
+        "version",
+        "target",
+        "results",
+        "summary",
+        "observations",
+        "created_at",
+    }
     assert data["target"] == {
         "sandbox_id": outcome.snapshot["sandbox_id"],
         "path": ORIGIN,

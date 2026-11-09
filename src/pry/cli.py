@@ -24,6 +24,10 @@ from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
 from pry.probe.idor import load_idor_config
 from pry.probe.live import scan_live
+from pry.probe.rate_limit import (
+    RATE_LIMIT_DEFAULT_COUNT,
+    validate_rate_limit,
+)
 from pry.probe.scan import scan_local, validate_endpoints
 from pry.probe.ssrf import validate_ssrf
 from pry.proof import ProofError, load_bundle, verify_bundle
@@ -34,7 +38,10 @@ _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHO
 CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
 SSRF_CONFIG_REQUIRED = "SSRF_CONFIG_REQUIRED"
 SSRF_REQUIRES_LEVEL1 = "SSRF_REQUIRES_LEVEL1"
-SSRF_REQUIRES_LOCAL_LEVEL1 = "SSRF_REQUIRES_LOCAL_LEVEL1"
+RATE_LIMIT_CONFIG_REQUIRED = "RATE_LIMIT_CONFIG_REQUIRED"
+RATE_LIMIT_REQUIRES_LEVEL1 = "RATE_LIMIT_REQUIRES_LEVEL1"
+LEVEL1_CHECK_REQUIRED = "LEVEL1_CHECK_REQUIRED"
+LEVEL1_REQUIRES_LOCAL = "LEVEL1_REQUIRES_LOCAL"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,7 +76,10 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         choices=[0, 1, 2],
-        help="Intensity level (0 floor, 1 local SSRF; 2 not implemented)",
+        help=(
+            "Intensity level (0 floor, 1 local SSRF and rate-limit; "
+            "2 not implemented)"
+        ),
     )
     scan.add_argument(
         "--confirm",
@@ -107,6 +117,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--ssrf-parameter",
         metavar="NAME",
         help="Query parameter that takes the callback URL",
+    )
+    scan.add_argument(
+        "--rate-limit-endpoint",
+        metavar="PATH",
+        help="Declared local endpoint for the level 1 rate-limit observation",
+    )
+    scan.add_argument(
+        "--rate-limit-count",
+        type=int,
+        metavar="N",
+        help="Requests for the rate-limit observation, 1-20 (default: 10)",
     )
     scan.add_argument(
         "--report",
@@ -358,6 +379,14 @@ def _probe_line(result: ProbeResult) -> str:
     return "%s: %s: %s" % (result.probe, result.verdict, result.evidence)
 
 
+def _observation_line(observation: dict) -> str:
+    return "%s: %s: %s" % (
+        observation.get("probe"),
+        observation.get("status"),
+        observation.get("evidence"),
+    )
+
+
 def _scan_target_path(args) -> int:
     if args.idor_config:
         _print_error(
@@ -374,7 +403,15 @@ def _scan_target_path(args) -> int:
         )
         return 2
 
+    has_ssrf_flags = (
+        args.ssrf_endpoint is not None or args.ssrf_parameter is not None
+    )
+    has_rate_limit_flags = (
+        args.rate_limit_endpoint is not None
+        or args.rate_limit_count is not None
+    )
     ssrf_config = None
+    rate_limit_config = None
     if args.level == 1:
         if not args.confirm:
             _print_error(
@@ -384,7 +421,17 @@ def _scan_target_path(args) -> int:
                 )
             )
             return 2
-        if args.ssrf_endpoint is None or args.ssrf_parameter is None:
+        if args.rate_limit_count is not None and args.rate_limit_endpoint is None:
+            _print_error(
+                ProbeError(
+                    RATE_LIMIT_CONFIG_REQUIRED,
+                    "level 1 rate-limit checks require --rate-limit-endpoint",
+                )
+            )
+            return 2
+        if has_ssrf_flags and (
+            args.ssrf_endpoint is None or args.ssrf_parameter is None
+        ):
             _print_error(
                 ProbeError(
                     SSRF_CONFIG_REQUIRED,
@@ -392,18 +439,44 @@ def _scan_target_path(args) -> int:
                 )
             )
             return 2
-        try:
-            ssrf_config = validate_ssrf(
-                args.ssrf_endpoint, args.ssrf_parameter
+        if not has_ssrf_flags and not has_rate_limit_flags:
+            _print_error(
+                ProbeError(
+                    LEVEL1_CHECK_REQUIRED,
+                    "level 1 requires --ssrf-endpoint and --ssrf-parameter, "
+                    "or --rate-limit-endpoint",
+                )
             )
+            return 2
+        try:
+            if has_ssrf_flags:
+                ssrf_config = validate_ssrf(
+                    args.ssrf_endpoint, args.ssrf_parameter
+                )
+            if args.rate_limit_endpoint is not None:
+                rate_limit_config = validate_rate_limit(
+                    args.rate_limit_endpoint,
+                    args.rate_limit_count
+                    if args.rate_limit_count is not None
+                    else RATE_LIMIT_DEFAULT_COUNT,
+                )
         except ProbeError as exc:
             _print_error(exc)
             return 2
-    elif args.ssrf_endpoint is not None or args.ssrf_parameter is not None:
+    elif has_ssrf_flags:
         _print_error(
             ProbeError(
                 SSRF_REQUIRES_LEVEL1,
                 "SSRF checks require --level 1 and --confirm on a local path",
+            )
+        )
+        return 2
+    elif has_rate_limit_flags:
+        _print_error(
+            ProbeError(
+                RATE_LIMIT_REQUIRES_LEVEL1,
+                "rate-limit observations require --level 1 and --confirm on a "
+                "local path",
             )
         )
         return 2
@@ -422,6 +495,8 @@ def _scan_target_path(args) -> int:
     }
     if ssrf_config is not None:
         kwargs["ssrf_config"] = ssrf_config
+    if rate_limit_config is not None:
+        kwargs["rate_limit_config"] = rate_limit_config
     try:
         outcome = scan_local(args.target, **kwargs)
     except (IntakeError, ProbeError, ProofError) as exc:
@@ -436,12 +511,14 @@ def _scan_target_url(args) -> int:
         args.level == 1
         or args.ssrf_endpoint is not None
         or args.ssrf_parameter is not None
+        or args.rate_limit_endpoint is not None
+        or args.rate_limit_count is not None
     ):
         _print_error(
             ProbeError(
-                SSRF_REQUIRES_LOCAL_LEVEL1,
-                "SSRF checks run only against a local path at level 1; "
-                "live SSRF is not implemented",
+                LEVEL1_REQUIRES_LOCAL,
+                "level 1 expanded checks run only against a local path; live "
+                "SSRF and rate-limit checks are not implemented",
             ),
             args.json,
         )
@@ -501,6 +578,7 @@ def _finish_scan(args, outcome) -> int:
         data = {
             "snapshot": outcome.snapshot,
             "results": [asdict(result) for result in outcome.results],
+            "observations": outcome.observations,
             "summary": summary,
             "results_path": str(outcome.results_path),
         }
@@ -510,6 +588,8 @@ def _finish_scan(args, outcome) -> int:
     else:
         for result in outcome.results:
             print(_probe_line(result))
+        for observation in outcome.observations:
+            print(_observation_line(observation))
         print("Results: %s" % outcome.results_path)
         if report_path is not None:
             print("Report: %s" % report_path)

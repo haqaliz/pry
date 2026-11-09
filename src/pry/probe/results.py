@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -75,6 +75,7 @@ class ScanResult:
     results: list
     summary: dict
     created_at: str
+    observations: list = field(default_factory=list)
 
 
 def summarize(results) -> dict:
