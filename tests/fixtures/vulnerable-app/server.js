@@ -1,6 +1,7 @@
 const http = require("http");
 
 const port = Number(process.env.PORT) || 3000;
+let rateHits = 0;
 
 http
   .createServer((req, res) => {
@@ -19,6 +20,24 @@ http
     if (req.url === "/api/private") {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end('{"error":"unauthorized"}');
+      return;
+    }
+
+    if (req.url === "/api/rate-limit") {
+      rateHits += 1;
+      if (rateHits > 3) {
+        res.writeHead(429, { "Retry-After": "1", "Content-Type": "text/plain" });
+        res.end("slow down\n");
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("ok\n");
+      return;
+    }
+
+    if (req.url === "/api/no-limit") {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("ok\n");
       return;
     }
 
