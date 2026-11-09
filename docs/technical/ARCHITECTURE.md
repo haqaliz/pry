@@ -3,9 +3,9 @@
 Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; P3
 read-only probes are implemented; P5 read-only signed bundles are implemented for local and
 live read-only findings; P6 local report/corpus are implemented; live read-only scans and
-configured live IDOR are implemented; local Level 1 SSRF is implemented; live write-based
-checks, live SSRF/rate-limit, Level 2, general authenticated scanning, hosted reports, and the
-rest of P5 are design intent.
+configured live IDOR are implemented; local Level 1 SSRF and a bounded local rate-limit
+observation are implemented; live write-based checks, live SSRF, live rate-limit, Level 2,
+general authenticated scanning, hosted reports, and the rest of P5 are design intent.
 
 ## Pipeline
 
@@ -36,7 +36,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints) + live read-only + configured IDOR; P4 Level 1 local SSRF (callback sidecar)
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints) + live read-only + configured IDOR; P4 Level 1 local SSRF (callback) + rate-limit observation
   proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
   cli/        pry scan | verify-ownership | intake | verify-proof | report
@@ -63,6 +63,9 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Local SSRF Level 1 is callback-proven.** A callback sidecar on the internal network logs a
   per-run nonce; `EXPOSED` only on a hit. `--confirm` is required, the callback has no egress,
   and live SSRF is deferred. A hit proves an internal fetch, not external egress.
+- **Rate-limit is an observation, not a verdict.** A bounded local sample reports
+  `OBSERVED`/`THROTTLED`/`UNVERIFIED` in a separate, unsigned section. It never becomes
+  `EXPOSED`; live rate-limit is deferred because of load/lockout risk.
 - **The missing-auth probe only requests declared paths.** The owner supplies path-only
   declarations; absolute URLs and protocol-relative paths are rejected on the host and in the
   sidecar. The result quotes the declaration and the response, not a global auth conclusion.

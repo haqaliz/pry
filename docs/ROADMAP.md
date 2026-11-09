@@ -46,14 +46,14 @@ Ed25519-signed bundle; live replay remains P5. M1.4 is not started.
 | # | Milestone | Done when |
 |---|---|---|
 | M2.1 | Live-target ownership flow | DNS/file verification works against a real domain, not just local fixtures |
-| M2.2 | Level 1 expanded read-only checks (P4) | Local SSRF implemented with confirmation and a callback; rate-limit/live SSRF deferred |
+| M2.2 | Level 1 expanded read-only checks (P4) | Local SSRF + bounded rate-limit observation; live rate-limit/live SSRF/Level 2 deferred |
 | M2.3 | Level 2 write-based confirmation (P4) | Sandbox/staging only by default; live target requires an extra explicit step |
 | M2.4 | Findings corpus and report (P6) | Bank (target, probe, verdict, proof); local HTML report/corpus; hosted/public reports deferred |
 
 Phase 2 status (2026-11-10): M2.1 live read-only scan implemented with a P1 token; the
-real-domain manual check remains. M2.2 partial — local Level 1 SSRF implemented with
-`--confirm` and a callback sidecar; rate-limit and live SSRF are not. M2.4 partial — local/
-live read-only HTML report and JSONL corpus implemented; hosted/public reports deferred.
+real-domain manual check remains. M2.2 partial — local Level 1 SSRF and a bounded local
+rate-limit observation implemented; live SSRF and live rate-limit are not. M2.4 partial —
+local/live read-only HTML report and JSONL corpus implemented; hosted/public reports deferred.
 M2.3 (Level 2) not started.
 
 ## Phase 3: Monetization experiment and platform integration (after the window)

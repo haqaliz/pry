@@ -17,10 +17,11 @@ implemented (first slice + missing-auth declarations): CORS with credentials, ve
 leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
 credentials. P5 read-only signed proof bundles implemented for local and live read-only
 EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans and
-configured live IDOR checks are implemented for URLs with a P1 token. Local Level 1 SSRF is
-implemented with `--confirm` and a callback sidecar. IDOR discovery, local IDOR, exposed
-database rules, live write-based checks, live SSRF, rate-limit probing, Level 2, and
-hosted/public reports are not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
+configured live IDOR checks are implemented for URLs with a P1 token. Local Level 1 SSRF and
+bounded local rate-limit observations are implemented with `--confirm`. IDOR discovery, local
+IDOR, exposed database rules, live write-based checks, live SSRF, live rate-limit probing,
+Level 2, and hosted/public reports are not started. A clean P3 result is `NOT_REPRODUCED`,
+never "secure."
 
 ## Ownership Verification (P1)
 
@@ -181,9 +182,27 @@ Pry sends the declared endpoint a callback URL with a per-run nonce, and the app
 - GET query parameter only; no POST/body/header injection.
 - The callback hit proves the app fetched an internal callback URL. It does **not** prove
   arbitrary external egress.
-- No live SSRF (needs a public callback), no rate-limit probing, no Level 2/write checks.
+- No live SSRF (needs a public callback), no live rate-limit, no Level 2/write checks.
 - Missing `--confirm`, level 2, SSRF flags at level 0, or a URL with SSRF flags → exit 2.
 - The callback sidecar has no egress and no host port; it is removed with the sandbox.
+
+## Rate-Limit Observation (Level 1)
+
+```bash
+pry scan ./my-app --level 1 --confirm \
+  --rate-limit-endpoint /login --rate-limit-count 10
+```
+
+This sends 1–20 sequential GETs to a declared local endpoint and records what happened:
+
+- All 2xx → `OBSERVED`: no throttling seen in N requests.
+- 429/503/`Retry-After` → `THROTTLED` at request K.
+- Transport/control failure → `UNVERIFIED`.
+
+This is a **hardening observation, not a verdict**. It is not `EXPOSED`, is not signed, and
+does not change the scan exit code. It appears in a separate Observations section of the
+report and in `--json`. Local only; live rate-limit probing is not implemented because it
+creates load/lockout risk.
 
 ## Signed Proof Bundles (P5 read-only slice)
 
@@ -211,8 +230,9 @@ Live replay and key distribution are future work.
 `pry report RUN_DIR` or `pry scan ./app --report` writes a self-contained HTML report at
 `RUN_DIR/report.html` (0600) from a local or live read-only run. It shows the target, verdict
 counts, each finding's evidence and request/response, and each proof's fingerprint and
-VALID/INVALID status. The report is a local view; the signed bundles are the evidence, and the
-HTML itself is not signed.
+VALID/INVALID status. Hardening observations (such as a bounded rate-limit sample) appear in a
+separate unsigned section. The report is a local view; the signed bundles are the evidence,
+and the HTML itself is not signed.
 
 The corpus appends one JSONL line per result to `~/.pry/corpus.jsonl` (`PRY_CORPUS` override),
 0600. A corpus write failure is a warning, not a scan failure.
@@ -231,7 +251,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + configured IDOR; P4 Level 1 local SSRF
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + configured IDOR; P4 Level 1 local SSRF + rate-limit observation
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -282,6 +302,10 @@ pry scan https://example.com --token <token> --idor-config idor.json
 pry scan ./my-app --level 1 --confirm \
   --ssrf-endpoint /api/fetch --ssrf-parameter url
 
+# Local rate-limit observation (hardening, not a verdict)
+pry scan ./my-app --level 1 --confirm \
+  --rate-limit-endpoint /login --rate-limit-count 10
+
 # Verify a signed proof bundle
 pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
 
@@ -315,9 +339,11 @@ Pry implements a strict ownership gate with:
    configured IDOR adds the credentials from a 0600 file to its three requests only. Stored
    headers redact auth/cookie/API-key values.
 8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is
-   the only EXPOSED condition. Live SSRF, rate-limit probing, Level 2, and write-based checks
-   are not implemented.
-9. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence.
+   the only EXPOSED condition. The rate-limit probe is a bounded local hardening observation,
+   not a verdict. Live SSRF, live rate-limit, Level 2, and write-based checks are not
+   implemented.
+9. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence. The
+   report shows hardening observations separately from verdicts.
 10. Absence of a reproduced finding is never reported as "secure".
 
 ## Contributing
