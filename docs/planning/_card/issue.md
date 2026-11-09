@@ -1,61 +1,53 @@
-# Local SSRF, Level 1 (P4 first slice)
+# Rate-Limit Observation (P4 Level 1, local)
 
 - **Type:** feat
-- **Slug:** `ssrf-local`
+- **Slug:** `rate-limit`
 - **Owner:** aliz
 - **Source:** inline brief. No GitHub issue.
-- **Capability:** P4 Level 1, local SSRF. Depends on P1–P3, P5 bundles, P6 report,
-  and `ETHICS.md`.
+- **Capability:** P4 Level 1 rate-limit observation, local only.
 
 ## Brief
 
-Level 1 is expanded, still read-only, but requires explicit confirmation. The first P4 slice
-is SSRF against a local sandbox app: the owner declares a fetch endpoint and parameter, Pry
-sends it a callback URL on the sandbox's internal network, and the callback records the hit.
-`EXPOSED` means the app actually fetched the callback. No live SSRF, no rate-limit, no writes.
+Send a bounded series of GETs to a declared endpoint in the local sandbox and record whether
+the app throttles. This is a **hardening observation**, not an `EXPOSED` verdict: absence of a
+rate limit is not a reproduced request/response pair demonstrating data exposure. The report
+gets an Observations section; the verdict counts and signed proof bundles stay reserved for
+`EXPOSED`.
 
 ## Flow
 
 ```bash
 pry scan ./my-app --level 1 --confirm \
-  --ssrf-endpoint /api/fetch --ssrf-parameter url
+  --rate-limit-endpoint /login --rate-limit-count 10
 ```
 
-1. Boot the app in the P2 sandbox and run the floor probes.
-2. Start a callback sidecar on the same `--internal` network, alias `pry-callback`.
-3. Send `GET /api/fetch?url=http://pry-callback:9000/<nonce>` to the app.
-4. The app fetches the callback; the callback logs the request.
-5. `EXPOSED` iff the log contains the nonce; `NOT_REPRODUCED` if the app responds but no
-   hit; `UNVERIFIED` if the app request or callback control fails.
+- 429/503/`Retry-After` at any request → `THROTTLED`.
+- All 2xx in the bounded series → `OBSERVED` ("no throttling seen in N requests").
+- Transport/control failure → `UNVERIFIED`.
+- No `EXPOSED` from this check; no proof bundle; exit code stays based on verdicts.
 
 ## Scope
 
-- `--level 1 --confirm --ssrf-endpoint PATH --ssrf-parameter NAME` for a local repo.
-- Level 1 requires `--confirm`; missing → exit 2. Level 2 remains unsupported.
-- SSRF flags without level 1 or on a live URL → exit 2.
-- Callback sidecar: Python image, scripts mounted read-only, alias `pry-callback`, port 9000,
-  hit log in `/tmp`, no egress, no host port, all existing sandbox security flags.
-- Probe script: GET query parameter only; path-only endpoint; token parameter; 10s app
-  timeout; 5s callback wait; 4KiB body cap.
-- Result: request = app request; response = callback hit; evidence = app status + hit path;
-  signed/report/corpus.
-- Tests: scripts with local servers; scan fakes; opt-in Docker fixture with `/api/fetch`.
+- Level 1 + `--confirm`, local only; path-only endpoint; count 1–20 (default 10).
+- Sequential GETs, no auth, 0.1s spacing, bounded total time; no POST/body.
+- Observation in `results.json` and the HTML report; CLI/JSON output.
+- Level 1 may run SSRF and/or rate-limit; at least one is required.
+- Tests: sidecar/scan/CLI/report; Docker fixture with a throttled and an unthrottled endpoint.
 
 ## Out of scope
 
-- Live SSRF (needs a public callback), rate-limit probing.
-- Level 2/write-based confirmation, auth, discovery, DB rules.
-- POST/body/header injection; only GET query parameters.
+- Live rate-limit probing (load/lockout risk).
+- Treating "no rate limit" as `EXPOSED`.
+- Level 2/writes, auth, distributed/parallel probing, discovery.
 - Hosted reports.
 
 ## Acceptance criteria
 
-- `--level 1 --confirm` + a vulnerable fixture → `EXPOSED`, callback hit, signed proof,
-  report, no leftovers.
-- App responds but no callback hit → `NOT_REPRODUCED`.
-- Invalid endpoint/parameter, missing `--confirm`, level 2, live URL + SSRF flags → exit 2,
-  no request.
-- Callback and app have no egress; no host port; no Docker socket.
-- The callback sidecar and workspace are removed on success/failure/SIGINT.
-- Default suite offline; Docker SSRF test opt-in.
+- All 2xx in N requests → `OBSERVED`, report shows it, no proof bundle, exit 0/1 unchanged.
+- A 429/503 at request K → `THROTTLED` with K and status.
+- Transport error → `UNVERIFIED`.
+- Missing `--confirm`, level 0, URL, or count out of bounds → exit 2.
+- Level 1 with neither SSRF nor rate-limit config → exit 2.
+- Observations never appear as `EXPOSED` or as signed proof bundles.
+- Default suite offline; Docker test opt-in.
 - No "secure" claim.
