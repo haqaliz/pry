@@ -1,6 +1,7 @@
 # PRD — Local IDOR (P3 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Configured local IDOR implemented; IDOR
+  discovery, exposed database rules, live SSRF, Level 2, and hosted reports are deferred.
 - **Owner:** aliz
 - **Slug:** `local-idor`
 - **Capability:** P3 remainder — configured local IDOR/access control
