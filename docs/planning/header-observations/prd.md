@@ -1,6 +1,8 @@
 # PRD — Response Header Observations (P3 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Opt-in header observations implemented for local
+  and live scans; IDOR discovery, exposed database rules, live SSRF, Level 2, and hosted reports
+  are deferred.
 - **Owner:** aliz
 - **Slug:** `header-observations`
 - **Capability:** P3 remainder — missing security headers, observation only
