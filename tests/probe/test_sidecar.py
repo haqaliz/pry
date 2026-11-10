@@ -1507,8 +1507,10 @@ def test_sidecar_write_redacts_stored_response_credentials():
         result["response"]["verification"]["response"]["headers"]["set-cookie"]
         == sidecar.REDACTED
     )
-    # The fake fetch saw the real values; only the stored copy is redacted.
-    assert fetch.responses == []
+    assert set(result["request"]["headers"]) == {"user-agent", "content-type"}
+    assert set(result["response"]["verification"]["request"]["headers"]) == {
+        "user-agent"
+    }
 
 
 def test_sidecar_write_caps_both_captured_bodies():

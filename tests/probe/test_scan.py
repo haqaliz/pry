@@ -32,6 +32,7 @@ from pry.probe.idor import IdorConfig
 from pry.probe.rate_limit import RateLimitConfig
 from pry.probe.scan import INVALID_ENDPOINT, ScanOutcome
 from pry.probe.ssrf import SsrfConfig
+from pry.probe.write import WriteConfig
 from pry.proof import (
     PROOF_FAILED,
     ProofError,
@@ -64,6 +65,9 @@ class FakeDocker:
         self.config_paths = []
         self.config_modes = []
         self.config_payloads = []
+        self.write_config_paths = []
+        self.write_config_modes = []
+        self.write_config_payloads = []
 
     def create_network(self, name):
         self.calls.append(("create_network", name))
@@ -76,7 +80,9 @@ class FakeDocker:
         if name in self.networks:
             self.networks.remove(name)
 
-    def start_sidecar(self, network, name, script, config_path=None):
+    def start_sidecar(
+        self, network, name, script, config_path=None, write_config_path=None
+    ):
         call = ("start_sidecar", network, name, str(script))
         if config_path is not None:
             call = call + (str(config_path),)
@@ -86,6 +92,15 @@ class FakeDocker:
             )
             self.config_payloads.append(
                 json.loads(Path(config_path).read_text(encoding="utf-8"))
+            )
+        if write_config_path is not None:
+            call = call + (str(write_config_path),)
+            self.write_config_paths.append(str(write_config_path))
+            self.write_config_modes.append(
+                stat.S_IMODE(Path(write_config_path).stat().st_mode)
+            )
+            self.write_config_payloads.append(
+                json.loads(Path(write_config_path).read_text(encoding="utf-8"))
             )
         self.calls.append(call)
         self.sidecars.append(name)
@@ -1055,3 +1070,202 @@ def test_scan_without_an_idor_config_mounts_nothing_and_runs_no_idor(
         "secrets",
         "database",
     ]
+
+
+WRITE_CONFIG = WriteConfig(
+    method="POST",
+    endpoint="/api/write",
+    body='{"name": "{{marker}}", "note": "scan-write-secret"}',
+    verify_endpoint="/api/verify",
+    verify_contains="{{marker}}",
+    content_type="application/json",
+)
+
+
+def _write_payload(verdict=EXPOSED):
+    payload = _payload("write", verdict)
+    payload["request"] = {
+        "method": "POST",
+        "url": BASE + "/api/write",
+        "headers": {
+            "user-agent": "pry/0.1",
+            "content-type": "application/json",
+        },
+    }
+    payload["response"] = {
+        "status": 201,
+        "headers": {},
+        "body": '{"ok": true}',
+        "verification": {
+            "request": {
+                "method": "GET",
+                "url": BASE + "/api/verify",
+                "headers": {"user-agent": "pry/0.1"},
+            },
+            "response": {
+                "status": 200,
+                "headers": {},
+                "body": '{"stored": "pry-0123456789abcdef"}',
+            },
+        },
+    }
+    return payload
+
+
+def _write_exec_calls(docker):
+    return [
+        call
+        for call in docker.calls
+        if call[0] == "exec" and call[2][2] == "write"
+    ]
+
+
+def test_scan_mounts_a_0600_temp_copy_of_the_write_config(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker(responses={"write": _write_payload(NOT_REPRODUCED)})
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(
+        repo, out=tmp_path / "run", docker=docker, write_config=WRITE_CONFIG
+    )
+
+    started = [call for call in docker.calls if call[0] == "start_sidecar"]
+    assert len(docker.write_config_paths) == 1
+    written = docker.write_config_paths[0]
+    assert started[0][-1] == written
+    assert docker.write_config_modes == [0o600]
+    assert docker.write_config_payloads == [
+        {
+            "method": "POST",
+            "endpoint": "/api/write",
+            "body": WRITE_CONFIG.body,
+            "verify_endpoint": "/api/verify",
+            "verify_contains": "{{marker}}",
+            "content_type": "application/json",
+        }
+    ]
+    assert _write_exec_calls(docker)[0][2] == [
+        "python",
+        "/pry/sidecar.py",
+        "write",
+        BASE,
+        "/pry-config/write.json",
+    ]
+    assert outcome.results[-1].probe == "write"
+    assert not Path(written).exists()
+    for text in _run_texts(outcome):
+        assert written not in text
+        assert "scan-write-secret" not in text
+
+
+def test_scan_runs_the_write_after_idor_with_both_configs_mounted(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker(
+        responses={
+            "idor": _payload("idor", NOT_REPRODUCED),
+            "write": _write_payload(NOT_REPRODUCED),
+        }
+    )
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(
+        repo,
+        out=tmp_path / "run",
+        docker=docker,
+        idor_config=IDOR,
+        write_config=WRITE_CONFIG,
+    )
+
+    kinds = [
+        call[2][2]
+        for call in docker.calls
+        if call[0] == "exec" and call[2][1] == "/pry/sidecar.py"
+    ]
+    assert kinds[-2:] == ["idor", "write"]
+    assert [result.probe for result in outcome.results][-2:] == ["idor", "write"]
+    started = [call for call in docker.calls if call[0] == "start_sidecar"]
+    assert started[0][-2:] == (
+        docker.config_paths[0],
+        docker.write_config_paths[0],
+    )
+    assert not Path(docker.config_paths[0]).exists()
+    assert not Path(docker.write_config_paths[0]).exists()
+    assert docker.networks == []
+
+
+def test_scan_signs_an_exposed_write_with_the_verification_pair(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker(responses={"write": _write_payload(EXPOSED)})
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(
+        repo, out=tmp_path / "run", docker=docker, write_config=WRITE_CONFIG
+    )
+
+    written = outcome.results[-1]
+    assert written.probe == "write"
+    assert written.verdict == EXPOSED
+    assert written.proof is not None
+    payload, _fingerprint = verify_bundle(load_bundle(written.proof))
+    assert payload["finding"]["probe"] == "write"
+    assert payload["finding"]["verdict"] == EXPOSED
+    assert (
+        payload["finding"]["response"]["verification"]["response"]["status"]
+        == 200
+    )
+    assert outcome.summary[EXPOSED] == 1
+    temp_path = docker.write_config_paths[0]
+    assert not Path(temp_path).exists()
+    for text in _run_texts(outcome):
+        assert temp_path not in text
+        assert "scan-write-secret" not in text
+
+
+def test_scan_removes_the_write_temp_config_after_a_probe_failure(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+    monkeypatch.setattr(scan, "ProbeClient", ExplodingClient)
+
+    with pytest.raises(RuntimeError):
+        scan.scan_local(
+            repo, out=tmp_path / "run", docker=docker, write_config=WRITE_CONFIG
+        )
+
+    assert len(docker.write_config_paths) == 1
+    assert not Path(docker.write_config_paths[0]).exists()
+    assert docker.networks == []
+
+
+def test_scan_removes_the_write_temp_config_after_an_interrupt(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+    monkeypatch.setattr(scan, "ProbeClient", InterruptingClient)
+
+    with pytest.raises(KeyboardInterrupt):
+        scan.scan_local(
+            repo, out=tmp_path / "run", docker=docker, write_config=WRITE_CONFIG
+        )
+
+    assert len(docker.write_config_paths) == 1
+    assert not Path(docker.write_config_paths[0]).exists()
+    assert docker.networks == []
+
+
+def test_scan_without_a_write_config_runs_no_write(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(repo, out=tmp_path / "run", docker=docker)
+
+    assert docker.write_config_paths == []
+    assert _write_exec_calls(docker) == []
+    assert "write" not in [result.probe for result in outcome.results]

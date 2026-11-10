@@ -321,7 +321,9 @@ def test_ssrf_flags_at_level0_are_refused(
     assert local.calls == []
 
 
-def test_level2_is_refused_before_any_ssrf_work(repo, monkeypatch, capsys):
+def test_level2_without_a_write_config_is_refused_before_ssrf_work(
+    repo, monkeypatch, capsys
+):
     code, out, local, _live = _gate(
         monkeypatch,
         capsys,
@@ -329,7 +331,7 @@ def test_level2_is_refused_before_any_ssrf_work(repo, monkeypatch, capsys):
     )
 
     assert code == 2
-    assert "INTENSITY_INSUFFICIENT" in out
+    assert "WRITE_CONFIG_REQUIRED" in out
     assert local.calls == []
 
 

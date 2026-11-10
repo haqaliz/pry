@@ -64,15 +64,9 @@ def callback_source_dir() -> Path:
     return Path(__file__).with_name("callback_server.py").parent
 
 
-def _write_idor_config(config) -> str:
-    """Write the declared pair to a 0600 temp file for the read-only mount."""
-    payload = {
-        "identity_a": {"headers": dict(config.headers_a)},
-        "identity_b": {"headers": dict(config.headers_b)},
-        "object_a": config.object_a,
-        "object_b": config.object_b,
-    }
-    handle, path = tempfile.mkstemp(prefix="pry-idor-", suffix=".json")
+def _write_temp_config(prefix, payload) -> str:
+    """Write a config payload to a 0600 temp file for the read-only mount."""
+    handle, path = tempfile.mkstemp(prefix=prefix, suffix=".json")
     try:
         os.fchmod(handle, 0o600)
         with os.fdopen(handle, "w", encoding="utf-8") as stream:
@@ -88,6 +82,32 @@ def _write_idor_config(config) -> str:
             pass
         raise
     return path
+
+
+def _write_idor_config(config) -> str:
+    return _write_temp_config(
+        "pry-idor-",
+        {
+            "identity_a": {"headers": dict(config.headers_a)},
+            "identity_b": {"headers": dict(config.headers_b)},
+            "object_a": config.object_a,
+            "object_b": config.object_b,
+        },
+    )
+
+
+def _write_write_config(config) -> str:
+    return _write_temp_config(
+        "pry-write-",
+        {
+            "method": config.method,
+            "endpoint": config.endpoint,
+            "body": config.body,
+            "verify_endpoint": config.verify_endpoint,
+            "verify_contains": config.verify_contains,
+            "content_type": config.content_type,
+        },
+    )
 
 
 def _probe_payload(result):
@@ -295,6 +315,7 @@ def scan_local(
     ssrf_config=None,
     rate_limit_config=None,
     idor_config=None,
+    write_config=None,
 ):
     _validated_path(path)
     endpoints = validate_endpoints(endpoints)
@@ -304,21 +325,27 @@ def scan_local(
     observations = []
     corpus_error = None
     config_path = None
+    write_config_path = None
 
     def on_ready(handle: SandboxHandle) -> None:
         sidecar = "pry-probe-" + handle.sandbox_id
         app_base = "http://app:%d" % handle.port
         failure = None
         try:
-            if config_path is None:
-                runner.start_sidecar(network, sidecar, sidecar_script_path())
-            else:
+            mounts = {}
+            if config_path is not None:
+                mounts["config_path"] = config_path
+            if write_config_path is not None:
+                mounts["write_config_path"] = write_config_path
+            if mounts:
                 runner.start_sidecar(
                     network,
                     sidecar,
                     sidecar_script_path(),
-                    config_path=config_path,
+                    **mounts
                 )
+            else:
+                runner.start_sidecar(network, sidecar, sidecar_script_path())
             client = ProbeClient(runner, sidecar, app_base)
             results.extend(client.run_all())
             if headers:
@@ -343,6 +370,8 @@ def scan_local(
                 )
             if idor_config is not None:
                 results.append(client.run_idor())
+            if write_config is not None:
+                results.append(client.run_write())
         except BaseException as exc:
             failure = exc
             raise
@@ -358,6 +387,8 @@ def scan_local(
     try:
         if idor_config is not None:
             config_path = _write_idor_config(idor_config)
+        if write_config is not None:
+            write_config_path = _write_write_config(write_config)
         intake_result = intake(
             path,
             out=out,
@@ -375,11 +406,12 @@ def scan_local(
         failure = exc
         raise
     finally:
-        if config_path is not None:
-            try:
-                os.unlink(config_path)
-            except OSError:
-                pass
+        for temp in (config_path, write_config_path):
+            if temp is not None:
+                try:
+                    os.unlink(temp)
+                except OSError:
+                    pass
         try:
             runner.remove_network(network)
         except Exception:

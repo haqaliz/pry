@@ -13,6 +13,7 @@ from pry.probe.results import UNVERIFIED, VERDICTS, ProbeResult
 
 SIDECAR_PATH = "/pry/sidecar.py"
 IDOR_CONFIG_PATH = "/pry-config/idor.json"
+WRITE_CONFIG_PATH = "/pry-config/write.json"
 EXEC_FAILED = "EXEC_FAILED"
 EXEC_TIMEOUT = "EXEC_TIMEOUT"
 INVALID_RESULT = "INVALID_RESULT"
@@ -101,6 +102,20 @@ class ProbeClient:
                 "idor",
                 self.base_url,
                 IDOR_CONFIG_PATH,
+            ],
+            self.timeout,
+        )
+
+    def run_write(self) -> ProbeResult:
+        """Exec the declared write and verification; a failure is UNVERIFIED."""
+        return self._exec(
+            "write",
+            [
+                "python",
+                SIDECAR_PATH,
+                "write",
+                self.base_url,
+                WRITE_CONFIG_PATH,
             ],
             self.timeout,
         )

@@ -592,3 +592,139 @@ def test_a_headers_payload_that_tries_to_carry_a_verdict_is_unverified():
     assert result["status"] == UNVERIFIED
     assert "HEADERS_PROBE_INVALID" in result["evidence"]
     assert "verdict" not in result
+
+
+WRITE_CONFIG_PATH = "/pry-config/write.json"
+WRITE_PROBE = "write"
+
+
+def _write_payload(verdict=EXPOSED, cause=None):
+    return {
+        "probe": WRITE_PROBE,
+        "verdict": verdict,
+        "cause": cause,
+        "evidence": "write POST /api/write returned status 201; "
+        "verification GET /api/verify returned status 200",
+        "request": {
+            "method": "POST",
+            "url": BASE + "/api/write",
+            "headers": {
+                "user-agent": "pry/0.1",
+                "content-type": "application/json",
+            },
+        },
+        "response": {
+            "status": 201,
+            "headers": {},
+            "body": '{"ok": true}',
+            "verification": {
+                "request": {
+                    "method": "GET",
+                    "url": BASE + "/api/verify",
+                    "headers": {"user-agent": "pry/0.1"},
+                },
+                "response": {
+                    "status": 200,
+                    "headers": {},
+                    "body": '{"stored": "pry-0123456789abcdef"}',
+                },
+            },
+        },
+    }
+
+
+def test_run_write_execs_the_sidecar_with_the_mounted_config():
+    fake = FakeDocker([_json(_write_payload())])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_write()
+
+    assert fake.calls == [
+        (
+            SIDECAR,
+            [
+                "python",
+                "/pry/sidecar.py",
+                "write",
+                BASE,
+                WRITE_CONFIG_PATH,
+            ],
+            20,
+        )
+    ]
+    assert result.probe == WRITE_PROBE
+    assert result.verdict == EXPOSED
+    assert result.request["headers"]["content-type"] == "application/json"
+    verification = result.response["verification"]
+    assert verification["response"]["status"] == 200
+    assert "pry-0123456789abcdef" in verification["response"]["body"]
+
+
+def test_run_write_carries_the_sidecars_unverified_cause():
+    payload = _write_payload(UNVERIFIED, "INVALID_WRITE_CONFIG")
+    payload["response"] = None
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_write()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == "INVALID_WRITE_CONFIG"
+    assert result.response is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        CommandResult(1, b"", b"sidecar exploded", False),
+        CommandResult(125, b"", b"", False),
+    ],
+)
+def test_a_run_write_nonzero_exit_is_unverified_with_a_cause(command):
+    result = ProbeClient(FakeDocker([command]), SIDECAR, BASE).run_write()
+
+    assert result.probe == WRITE_PROBE
+    assert result.verdict == UNVERIFIED
+    assert result.cause == EXEC_FAILED
+    assert result.response is None
+    assert result.evidence
+
+
+def test_a_run_write_timeout_is_unverified_with_a_cause():
+    fake = FakeDocker([CommandResult(-1, b"", b"", True)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_write()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == EXEC_TIMEOUT
+    assert result.response is None
+
+
+def test_a_run_write_docker_exception_is_unverified_and_does_not_escape():
+    fake = FakeDocker([RuntimeError("docker exec exploded")])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_write()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == EXEC_FAILED
+    assert "docker exec exploded" in result.evidence
+
+
+@pytest.mark.parametrize("stdout", [b"not json", b"", b"[1, 2]"])
+def test_invalid_write_json_is_unverified_with_a_cause(stdout):
+    fake = FakeDocker([CommandResult(0, stdout, b"", False)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_write()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == INVALID_RESULT
+    assert result.response is None
+
+
+def test_an_unknown_write_verdict_is_unverified_with_a_cause():
+    payload = _write_payload(verdict="SAFE")
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_write()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == UNKNOWN_VERDICT
+    assert result.response is None

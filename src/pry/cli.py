@@ -32,6 +32,7 @@ from pry.probe.rate_limit import (
 )
 from pry.probe.scan import scan_local, validate_endpoints
 from pry.probe.ssrf import validate_ssrf
+from pry.probe.write import load_write_config
 from pry.proof import ProofError, load_bundle, verify_bundle
 from pry.report import ReportError, load_run, write_report
 
@@ -45,6 +46,9 @@ RATE_LIMIT_CONFIG_REQUIRED = "RATE_LIMIT_CONFIG_REQUIRED"
 RATE_LIMIT_REQUIRES_LEVEL1 = "RATE_LIMIT_REQUIRES_LEVEL1"
 LEVEL1_CHECK_REQUIRED = "LEVEL1_CHECK_REQUIRED"
 LEVEL1_REQUIRES_LOCAL = "LEVEL1_REQUIRES_LOCAL"
+WRITE_CONFIG_REQUIRED = "WRITE_CONFIG_REQUIRED"
+WRITE_REQUIRES_LEVEL2 = "WRITE_REQUIRES_LEVEL2"
+WRITE_REQUIRES_LOCAL = "WRITE_REQUIRES_LOCAL"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,13 +85,13 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[0, 1, 2],
         help=(
             "Intensity level (0 floor, 1 local SSRF/rate-limit and live "
-            "rate-limit; 2 not implemented)"
+            "rate-limit; 2 local write confirmation)"
         ),
     )
     scan.add_argument(
         "--confirm",
         action="store_true",
-        help="Explicit confirmation for level 1 expanded checks",
+        help="Explicit confirmation for level 1 or level 2 expanded checks",
     )
     scan.add_argument("--json", action="store_true", help="Print JSON")
     scan.add_argument(
@@ -118,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--idor-config",
         metavar="FILE",
         help="0600 JSON config with two identities and two object paths",
+    )
+    scan.add_argument(
+        "--write-config",
+        metavar="FILE",
+        help="0600 JSON config for a declared local level 2 write",
     )
     scan.add_argument(
         "--ssrf-endpoint",
@@ -400,12 +409,6 @@ def _observation_line(observation: dict) -> str:
 
 
 def _scan_target_path(args) -> int:
-    if args.level == 2:
-        _print_error(
-            OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented")
-        )
-        return 2
-
     has_ssrf_flags = (
         args.ssrf_endpoint is not None or args.ssrf_parameter is not None
     )
@@ -413,14 +416,34 @@ def _scan_target_path(args) -> int:
         args.rate_limit_endpoint is not None
         or args.rate_limit_count is not None
     )
+    has_write = args.write_config is not None
+    if args.level < 2 and has_write:
+        _print_error(
+            ProbeError(
+                WRITE_REQUIRES_LEVEL2,
+                "write confirmation requires --level 2 and --confirm on a "
+                "local path",
+            )
+        )
+        return 2
+
     ssrf_config = None
     rate_limit_config = None
-    if args.level == 1:
+    if args.level in (1, 2):
         if not args.confirm:
             _print_error(
                 ProbeError(
                     CONFIRMATION_REQUIRED,
-                    "level 1 is expanded read-only work and requires --confirm",
+                    "level %d is expanded work and requires --confirm"
+                    % args.level,
+                )
+            )
+            return 2
+        if args.level == 2 and not has_write:
+            _print_error(
+                ProbeError(
+                    WRITE_CONFIG_REQUIRED,
+                    "level 2 requires --write-config",
                 )
             )
             return 2
@@ -428,7 +451,8 @@ def _scan_target_path(args) -> int:
             _print_error(
                 ProbeError(
                     RATE_LIMIT_CONFIG_REQUIRED,
-                    "level 1 rate-limit checks require --rate-limit-endpoint",
+                    "level %d rate-limit checks require "
+                    "--rate-limit-endpoint" % args.level,
                 )
             )
             return 2
@@ -438,11 +462,17 @@ def _scan_target_path(args) -> int:
             _print_error(
                 ProbeError(
                     SSRF_CONFIG_REQUIRED,
-                    "level 1 requires --ssrf-endpoint and --ssrf-parameter",
+                    "level %d requires --ssrf-endpoint and --ssrf-parameter"
+                    % args.level,
                 )
             )
             return 2
-        if not has_ssrf_flags and not has_rate_limit_flags and not args.idor_config:
+        if (
+            args.level == 1
+            and not has_ssrf_flags
+            and not has_rate_limit_flags
+            and not args.idor_config
+        ):
             _print_error(
                 ProbeError(
                     LEVEL1_CHECK_REQUIRED,
@@ -489,6 +519,7 @@ def _scan_target_path(args) -> int:
         idor_config = (
             load_idor_config(args.idor_config) if args.idor_config else None
         )
+        write_config = load_write_config(args.write_config) if has_write else None
     except ProbeError as exc:
         _print_error(exc)
         return 2
@@ -507,6 +538,8 @@ def _scan_target_path(args) -> int:
         kwargs["rate_limit_config"] = rate_limit_config
     if idor_config is not None:
         kwargs["idor_config"] = idor_config
+    if write_config is not None:
+        kwargs["write_config"] = write_config
     try:
         outcome = scan_local(args.target, **kwargs)
     except (IntakeError, ProbeError, ProofError) as exc:
@@ -517,6 +550,16 @@ def _scan_target_path(args) -> int:
 
 
 def _scan_target_url(args) -> int:
+    if args.write_config is not None:
+        _print_error(
+            ProbeError(
+                WRITE_REQUIRES_LOCAL,
+                "write confirmation is local-only; live writes are not "
+                "implemented",
+            ),
+            args.json,
+        )
+        return 2
     if args.level == 2:
         _print_error(
             OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented"),
