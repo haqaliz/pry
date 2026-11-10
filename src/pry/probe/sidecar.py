@@ -9,6 +9,7 @@ never leave the container.
 import http.client
 import json
 import re
+import secrets
 import socket
 import sys
 import time
@@ -52,6 +53,14 @@ RECOMMENDED_HEADERS = (
 )
 
 IDOR_CONTROL_FAILED = "IDOR_CONTROL_FAILED"
+
+WRITE = "write"
+INVALID_WRITE_CONFIG = "INVALID_WRITE_CONFIG"
+WRITE_METHODS = ("POST", "PUT", "PATCH")
+WRITE_MARKER = "{{marker}}"
+WRITE_CONTENT_TYPE_LIMIT = 128
+WRITE_CONTENT_TYPE_DEFAULT = "application/json"
+
 REDACTED = "[redacted]"
 REDACTED_HEADERS = frozenset(
     (
@@ -213,11 +222,16 @@ def _transport_error(exc: urllib.error.URLError) -> TransportError:
     return TransportError(TARGET_UNREACHABLE, str(exc.reason))
 
 
-def urllib_fetch(method: str, url: str, headers: dict, opener=None) -> Response:
+def urllib_fetch(
+    method: str, url: str, headers: dict, body=None, opener=None
+) -> Response:
     """Make one request; never follow a redirect, cap the body, name failures."""
     open_url = opener.open if opener is not None else _OPENER.open
+    data = body.encode("utf-8") if isinstance(body, str) else body
     try:
-        request = urllib.request.Request(url, headers=dict(headers), method=method)
+        request = urllib.request.Request(
+            url, data=data, headers=dict(headers), method=method
+        )
     except ValueError as exc:
         raise TransportError(REQUEST_FAILED, str(exc)) from exc
     try:
@@ -782,6 +796,207 @@ def probe_idor(
     )
 
 
+def _valid_write_path(path) -> bool:
+    if not _is_endpoint_path(path):
+        return False
+    return "?" not in path and "#" not in path
+
+
+def _write_config(data):
+    if not isinstance(data, dict):
+        raise ValueError("config must be a JSON object")
+    method = data.get("method")
+    if not isinstance(method, str) or method.upper() not in WRITE_METHODS:
+        raise ValueError("method must be POST, PUT, or PATCH")
+    endpoint = data.get("endpoint")
+    if not _valid_write_path(endpoint):
+        raise ValueError("endpoint must be a path with no query or fragment")
+    body = data.get("body")
+    if not isinstance(body, str) or not 1 <= len(body) <= BODY_LIMIT:
+        raise ValueError("body must be a string of 1..%d characters" % BODY_LIMIT)
+    if WRITE_MARKER not in body:
+        raise ValueError("body must contain %s" % WRITE_MARKER)
+    verify_endpoint = data.get("verify_endpoint")
+    if not _valid_write_path(verify_endpoint):
+        raise ValueError(
+            "verify_endpoint must be a path with no query or fragment"
+        )
+    verify_contains = data.get("verify_contains", WRITE_MARKER)
+    if not isinstance(verify_contains, str) or WRITE_MARKER not in verify_contains:
+        raise ValueError("verify_contains must contain %s" % WRITE_MARKER)
+    content_type = data.get("content_type", WRITE_CONTENT_TYPE_DEFAULT)
+    if (
+        not isinstance(content_type, str)
+        or not content_type
+        or len(content_type) > WRITE_CONTENT_TYPE_LIMIT
+        or any(ord(char) < 32 or ord(char) == 127 for char in content_type)
+    ):
+        raise ValueError(
+            "content_type must be a non-empty string of at most %d characters "
+            "with no control characters" % WRITE_CONTENT_TYPE_LIMIT
+        )
+    return (
+        method.upper(),
+        endpoint,
+        body,
+        verify_endpoint,
+        verify_contains,
+        content_type,
+    )
+
+
+def _write_verification(response):
+    if response is None:
+        return None
+    return {
+        "status": response.status,
+        "headers": _redact_headers(_headers(response.headers)),
+        "body": (response.body or "")[:BODY_LIMIT],
+    }
+
+
+def probe_write(base_url: str, config, fetch=None) -> dict:
+    """Send one declared write, then read it back; both pairs are captured."""
+    fetch = fetch if fetch is not None else urllib_fetch
+    headers = {"User-Agent": USER_AGENT}
+    try:
+        (
+            method,
+            endpoint,
+            body,
+            verify_endpoint,
+            verify_contains,
+            content_type,
+        ) = _write_config(config)
+    except ValueError as exc:
+        return _result(
+            WRITE,
+            UNVERIFIED,
+            INVALID_WRITE_CONFIG,
+            "invalid write config: %s" % exc,
+            "POST",
+            base_url,
+            headers,
+            None,
+        )
+
+    marker = "pry-" + secrets.token_hex(8)
+    request_body = body.replace(WRITE_MARKER, marker)
+    verify_needle = verify_contains.replace(WRITE_MARKER, marker)
+    write_url = base_url.rstrip("/") + endpoint
+    verify_url = base_url.rstrip("/") + verify_endpoint
+    write_headers = {"User-Agent": USER_AGENT, "Content-Type": content_type}
+    verify_headers = {"User-Agent": USER_AGENT}
+
+    def finish(verdict, cause, evidence, response, verification=None):
+        result = _result(
+            WRITE,
+            verdict,
+            cause,
+            evidence,
+            method,
+            write_url,
+            write_headers,
+            response,
+        )
+        if result["response"] is not None:
+            result["response"]["headers"] = _redact_headers(
+                result["response"]["headers"]
+            )
+            if verification is not None:
+                result["response"]["verification"] = verification
+        return result
+
+    try:
+        response = fetch(method, write_url, write_headers, request_body)
+    except TransportError as exc:
+        return _transport_result(
+            WRITE, method, write_url, write_headers, exc
+        )
+
+    written = "%s %s returned status %d" % (method, endpoint, response.status)
+    if response.status in (401, 403, 404):
+        return finish(
+            NOT_REPRODUCED,
+            None,
+            "write %s; the request was rejected" % written,
+            response,
+        )
+    if not 200 <= response.status < 300:
+        return finish(
+            UNVERIFIED,
+            None,
+            "write %s; cannot confirm the write" % written,
+            response,
+        )
+    if not _same_origin(base_url, response.final_url):
+        return finish(
+            NOT_REPRODUCED,
+            None,
+            "write %s from a different origin; the response is not evidence"
+            % written,
+            response,
+        )
+
+    verification_request = _request("GET", verify_url, verify_headers)
+    try:
+        verify_response = fetch("GET", verify_url, verify_headers)
+    except TransportError as exc:
+        verification = {"request": verification_request, "response": None}
+        return finish(
+            UNVERIFIED,
+            exc.cause,
+            "write %s; verification GET %s failed: %s"
+            % (written, verify_endpoint, exc.message or "request failed"),
+            response,
+            verification,
+        )
+
+    verification = {
+        "request": verification_request,
+        "response": _write_verification(verify_response),
+    }
+    read = "verification GET %s returned status %d" % (
+        verify_endpoint,
+        verify_response.status,
+    )
+    if not 200 <= verify_response.status < 300:
+        return finish(
+            NOT_REPRODUCED,
+            None,
+            "write %s; %s; the write could not be read back"
+            % (written, read),
+            response,
+            verification,
+        )
+    if not _same_origin(base_url, verify_response.final_url):
+        return finish(
+            NOT_REPRODUCED,
+            None,
+            "write %s; %s from a different origin"
+            % (written, read),
+            response,
+            verification,
+        )
+    if verify_needle not in (verify_response.body or ""):
+        return finish(
+            NOT_REPRODUCED,
+            None,
+            "write %s; %s but the generated marker was not present"
+            % (written, read),
+            response,
+            verification,
+        )
+    return finish(
+        EXPOSED,
+        None,
+        "write %s; %s and contains the generated marker"
+        % (written, read),
+        response,
+        verification,
+    )
+
+
 PROBES = {
     "cors": probe_cors,
     "errors": probe_errors,
@@ -986,17 +1201,45 @@ def _read_idor_config(path):
     )
 
 
+def _read_write_config(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        raise ValueError("cannot read the write config")
+    _write_config(data)
+    return data
+
+
 def main(argv=None, fetch=None, sleep=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     usage = (
         "usage: sidecar.py {cors|errors|secrets|database|headers} BASE_URL | "
         "sidecar.py unauth BASE_URL PATH | "
         "sidecar.py rate_limit BASE_URL PATH COUNT | "
-        "sidecar.py idor BASE_URL CONFIG_PATH\n"
+        "sidecar.py idor BASE_URL CONFIG_PATH | "
+        "sidecar.py write BASE_URL CONFIG_PATH\n"
     )
     if not args:
         sys.stderr.write(usage)
         return 2
+    if args[0] == WRITE:
+        if len(args) != 3:
+            sys.stderr.write(usage)
+            return 2
+        _, base_url, config_path = args
+        try:
+            config = _read_write_config(config_path)
+        except ValueError as exc:
+            sys.stderr.write("error: %s\n" % exc)
+            sys.stderr.write(usage)
+            return 2
+        print(
+            json.dumps(
+                probe_write(base_url, config, fetch=fetch), sort_keys=True
+            )
+        )
+        return 0
     if args[0] == HEADER_PROBE:
         if len(args) != 2:
             sys.stderr.write(usage)

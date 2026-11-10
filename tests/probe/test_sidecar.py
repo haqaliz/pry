@@ -7,6 +7,7 @@ import ast
 import io
 import json
 import os
+import re
 import socket
 import urllib.error
 from pathlib import Path
@@ -1193,3 +1194,451 @@ def test_main_reads_the_idor_config_and_prints_redacted_json(capsys, tmp_path):
         ("GET", BASE + IDOR_OBJECT_B, IDOR_B),
         ("GET", BASE + IDOR_OBJECT_B, IDOR_A),
     ]
+
+
+# --- declared local write (sidecar mode) ----------------------------------
+
+WRITE_ENDPOINT = "/api/write"
+WRITE_VERIFY = "/api/verify"
+WRITE_PATTERN = re.compile(r"pry-[0-9a-f]{16}")
+
+
+def _write_config(**overrides):
+    config = {
+        "method": "POST",
+        "endpoint": WRITE_ENDPOINT,
+        "body": '{"name": "{{marker}}"}',
+        "verify_endpoint": WRITE_VERIFY,
+        "verify_contains": "{{marker}}",
+        "content_type": "application/json",
+    }
+    config.update(overrides)
+    return config
+
+
+def _write_response(status=201, headers=None, body='{"ok": true}', path=WRITE_ENDPOINT):
+    return sidecar.Response(
+        status,
+        {"Content-Type": "application/json"} if headers is None else headers,
+        body,
+        BASE + path,
+    )
+
+
+def _verify_response(status=200, headers=None, body="", path=WRITE_VERIFY):
+    return sidecar.Response(
+        status,
+        {"Content-Type": "application/json"} if headers is None else headers,
+        body,
+        BASE + path,
+    )
+
+
+def _marker_of(body):
+    match = WRITE_PATTERN.search(body or "")
+    assert match is not None, body
+    return match.group(0)
+
+
+class WriteFetch:
+    """Records a write body and scripts responses, including marker echoes."""
+
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+        self.bodies = []
+
+    def __call__(self, method, url, headers, body=None):
+        self.calls.append((method, url, dict(headers)))
+        self.bodies.append(body)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        if callable(response):
+            response = response(self)
+        return response
+
+
+def _echo_marker(fetch, status=200, path=WRITE_VERIFY):
+    return _verify_response(
+        status, body='{"stored": "%s"}' % _marker_of(fetch.bodies[0]), path=path
+    )
+
+
+def test_sidecar_write_exposed_when_the_write_and_read_both_succeed():
+    fetch = WriteFetch(_write_response(201), lambda f: _echo_marker(f))
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["probe"] == "write"
+    assert result["verdict"] == sidecar.EXPOSED
+    assert result["cause"] is None
+    assert "201" in result["evidence"]
+    assert "200" in result["evidence"]
+    assert [call[:2] for call in fetch.calls] == [
+        ("POST", BASE + WRITE_ENDPOINT),
+        ("GET", BASE + WRITE_VERIFY),
+    ]
+    assert fetch.calls[0][2] == {
+        "User-Agent": sidecar.USER_AGENT,
+        "Content-Type": "application/json",
+    }
+    assert fetch.calls[1][2] == {"User-Agent": sidecar.USER_AGENT}
+    assert "{{marker}}" not in fetch.bodies[0]
+    assert result["request"] == {
+        "method": "POST",
+        "url": BASE + WRITE_ENDPOINT,
+        "headers": {
+            "user-agent": sidecar.USER_AGENT,
+            "content-type": "application/json",
+        },
+    }
+    assert set(result["request"]["headers"]) == {"user-agent", "content-type"}
+    assert result["response"]["status"] == 201
+    verification = result["response"]["verification"]
+    assert verification["request"] == {
+        "method": "GET",
+        "url": BASE + WRITE_VERIFY,
+        "headers": {"user-agent": sidecar.USER_AGENT},
+    }
+    assert verification["response"]["status"] == 200
+    assert _marker_of(fetch.bodies[0]) in verification["response"]["body"]
+    assert ProbeResult(**result).verdict == sidecar.EXPOSED
+
+
+@pytest.mark.parametrize("method", ["PUT", "PATCH"])
+def test_sidecar_write_uses_the_declared_method(method):
+    fetch = WriteFetch(_write_response(200), lambda f: _echo_marker(f))
+
+    result = sidecar.probe_write(BASE, _write_config(method=method), fetch=fetch)
+
+    assert result["verdict"] == sidecar.EXPOSED
+    assert fetch.calls[0][0] == method
+    assert result["request"]["method"] == method
+
+
+def test_sidecar_write_echoes_a_wrapped_verify_contains():
+    needle = '{"stored": "{{marker}}"}'
+    config = _write_config(verify_contains=needle)
+
+    def marker_body(f):
+        return _verify_response(
+            200, body=needle.replace("{{marker}}", _marker_of(f.bodies[0]))
+        )
+
+    fetch = WriteFetch(_write_response(201), marker_body)
+
+    assert sidecar.probe_write(BASE, config, fetch=fetch)["verdict"] == sidecar.EXPOSED
+
+
+def test_sidecar_write_uses_a_unique_marker_per_run():
+    def marker():
+        fetch = WriteFetch(_write_response(201), lambda f: _echo_marker(f))
+        sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+        return _marker_of(fetch.bodies[0])
+
+    first, second = marker(), marker()
+
+    assert first != second
+    assert WRITE_PATTERN.fullmatch(first)
+    assert len(first) == len("pry-") + 16
+
+
+def test_sidecar_write_defaults_to_json_content_type_and_the_marker():
+    config = _write_config()
+    del config["content_type"]
+    del config["verify_contains"]
+    fetch = WriteFetch(_write_response(201), lambda f: _echo_marker(f))
+
+    result = sidecar.probe_write(BASE, config, fetch=fetch)
+
+    assert result["verdict"] == sidecar.EXPOSED
+    assert fetch.calls[0][2]["Content-Type"] == "application/json"
+    assert _marker_of(fetch.bodies[0]) in result["response"]["verification"]["response"]["body"]
+
+
+def test_sidecar_write_uses_the_declared_content_type():
+    config = _write_config(
+        body="name={{marker}}", content_type="application/x-www-form-urlencoded"
+    )
+    fetch = WriteFetch(_write_response(201), lambda f: _echo_marker(f))
+
+    result = sidecar.probe_write(BASE, config, fetch=fetch)
+
+    assert fetch.calls[0][2]["Content-Type"] == "application/x-www-form-urlencoded"
+    assert result["request"]["headers"]["content-type"] == (
+        "application/x-www-form-urlencoded"
+    )
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_sidecar_write_rejected_status_is_not_reproduced_without_a_read(status):
+    fetch = WriteFetch(_write_response(status, body='{"error": "no"}'))
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert result["cause"] is None
+    assert result["response"]["status"] == status
+    assert "verification" not in result["response"]
+    assert len(fetch.calls) == 1
+
+
+@pytest.mark.parametrize("status", [302, 500, 503])
+def test_sidecar_write_other_non_2xx_is_unverified_without_a_read(status):
+    fetch = WriteFetch(_write_response(status))
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["response"]["status"] == status
+    assert "verification" not in result["response"]
+    assert len(fetch.calls) == 1
+
+
+def test_sidecar_write_transport_failure_is_unverified_with_no_response():
+    fetch = WriteFetch(
+        sidecar.TransportError(sidecar.TARGET_UNREACHABLE, "connection refused")
+    )
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.TARGET_UNREACHABLE
+    assert result["response"] is None
+    assert len(fetch.calls) == 1
+
+
+def test_sidecar_write_cross_origin_result_is_not_reproduced():
+    fetch = WriteFetch(
+        sidecar.Response(201, {}, "ok", "https://evil.invalid/api/write")
+    )
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert "verification" not in result["response"]
+    assert len(fetch.calls) == 1
+
+
+def test_sidecar_write_verification_transport_failure_is_unverified():
+    fetch = WriteFetch(
+        _write_response(201),
+        sidecar.TransportError(sidecar.REQUEST_TIMEOUT, "request timed out"),
+    )
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.REQUEST_TIMEOUT
+    assert result["response"]["status"] == 201
+    verification = result["response"]["verification"]
+    assert verification["request"]["url"] == BASE + WRITE_VERIFY
+    assert verification["response"] is None
+    assert "timed out" in result["evidence"]
+
+
+@pytest.mark.parametrize("status", [401, 404, 500])
+def test_sidecar_write_unreadable_verification_is_not_reproduced(status):
+    fetch = WriteFetch(_write_response(201), _verify_response(status))
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert result["response"]["status"] == 201
+    assert result["response"]["verification"]["response"]["status"] == status
+    assert len(fetch.calls) == 2
+
+
+def test_sidecar_write_absent_marker_is_not_reproduced_with_the_read_captured():
+    fetch = WriteFetch(
+        _write_response(201), _verify_response(200, body='{"stored": "other"}')
+    )
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert "marker" in result["evidence"]
+    verification = result["response"]["verification"]
+    assert verification["response"]["status"] == 200
+    assert '{"stored": "other"}' in verification["response"]["body"]
+
+
+def test_sidecar_write_cross_origin_verification_is_not_reproduced():
+    fetch = WriteFetch(
+        _write_response(201),
+        lambda f: _echo_marker(f, path=WRITE_VERIFY),
+    )
+    fetch.responses[1] = lambda f: sidecar.Response(
+        200, {}, '{"stored": "%s"}' % _marker_of(f.bodies[0]), "https://evil.invalid/x"
+    )
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert result["response"]["verification"]["response"]["status"] == 200
+
+
+def test_sidecar_write_redacts_stored_response_credentials():
+    fetch = WriteFetch(
+        _write_response(
+            201,
+            {
+                "Content-Type": "application/json",
+                "Set-Cookie": "sid=write-session",
+                "Authorization": "Bearer write-token",
+            },
+        ),
+        lambda f: _verify_response(
+            200,
+            {"Content-Type": "application/json", "Set-Cookie": "sid=verify-session"},
+            body='{"stored": "%s"}' % _marker_of(f.bodies[0]),
+        ),
+    )
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    stored = json.dumps(result)
+    for secret in ("write-session", "write-token", "verify-session"):
+        assert secret not in stored
+    assert result["response"]["headers"]["set-cookie"] == sidecar.REDACTED
+    assert result["response"]["headers"]["authorization"] == sidecar.REDACTED
+    assert (
+        result["response"]["verification"]["response"]["headers"]["set-cookie"]
+        == sidecar.REDACTED
+    )
+    # The fake fetch saw the real values; only the stored copy is redacted.
+    assert fetch.responses == []
+
+
+def test_sidecar_write_caps_both_captured_bodies():
+    write_body = '{"ok": "' + "w" * (sidecar.BODY_LIMIT * 2) + '"}'
+    fetch = WriteFetch(
+        _write_response(201, body=write_body),
+        lambda f: _verify_response(
+            200, body=_marker_of(f.bodies[0]) + "v" * (sidecar.BODY_LIMIT * 2)
+        ),
+    )
+
+    result = sidecar.probe_write(BASE, _write_config(), fetch=fetch)
+
+    assert result["verdict"] == sidecar.EXPOSED
+    assert len(result["response"]["body"]) == sidecar.BODY_LIMIT
+    assert (
+        len(result["response"]["verification"]["response"]["body"])
+        == sidecar.BODY_LIMIT
+    )
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        None,
+        [],
+        {},
+        _write_config(method="DELETE"),
+        _write_config(endpoint="http://evil.invalid/api"),
+        _write_config(endpoint="/api/write?x=1"),
+        _write_config(body="no marker"),
+        _write_config(verify_endpoint="api/write"),
+        _write_config(verify_contains="stored"),
+        _write_config(content_type="application/json\r\nX: 1"),
+    ],
+)
+def test_sidecar_write_refuses_an_invalid_config_before_any_fetch(config):
+    fetch = WriteFetch()
+
+    result = sidecar.probe_write(BASE, config, fetch=fetch)
+
+    assert result["probe"] == "write"
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.INVALID_WRITE_CONFIG
+    assert result["response"] is None
+    assert fetch.calls == []
+
+
+def test_urllib_fetch_sends_an_optional_utf8_body():
+    fake = FakeOpener(FakeHTTPResponse(201, {}, b"ok", BASE + WRITE_ENDPOINT))
+    body = '{"name": "pry caf\u00e9"}'
+
+    response = sidecar.urllib_fetch(
+        "POST",
+        BASE + WRITE_ENDPOINT,
+        {"Content-Type": "application/json"},
+        body,
+        opener=fake,
+    )
+
+    assert response.status == 201
+    assert fake.request.data == body.encode("utf-8")
+    assert fake.request.get_method() == "POST"
+    assert fake.request.get_header("Content-type") == "application/json"
+
+
+def test_urllib_fetch_keeps_a_get_without_a_body():
+    fake = FakeOpener(FakeHTTPResponse(200, {}, b"ok", BASE + "/"))
+
+    sidecar.urllib_fetch("GET", BASE + "/", {}, opener=fake)
+
+    assert fake.request.data is None
+    assert fake.request.get_method() == "GET"
+
+
+def test_main_accepts_write_and_prints_sorted_json(capsys, tmp_path):
+    path = tmp_path / "write.json"
+    path.write_text(json.dumps(_write_config()), encoding="utf-8")
+    os.chmod(str(path), 0o600)
+    fetch = WriteFetch(_write_response(201), lambda f: _echo_marker(f))
+
+    code = sidecar.main(["write", BASE, str(path)], fetch=fetch)
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert captured.err == ""
+    assert captured.out.count("\n") == 1
+    payload = json.loads(captured.out)
+    assert payload["probe"] == "write"
+    assert payload["verdict"] == sidecar.EXPOSED
+    assert payload["response"]["verification"]["response"]["status"] == 200
+    assert str(path) not in captured.out
+    assert captured.out == json.dumps(payload, sort_keys=True) + "\n"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["write"],
+        ["write", BASE],
+        ["write", BASE, "one.json", "extra"],
+    ],
+)
+def test_main_rejects_write_with_the_wrong_argument_count(argv, capsys):
+    code = sidecar.main(argv, fetch=WriteFetch())
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert "usage" in captured.err.lower()
+    assert "write" in captured.err
+
+
+@pytest.mark.parametrize(
+    "data",
+    [None, "{not json", "[]", json.dumps(_write_config(method="DELETE"))],
+)
+def test_main_reports_a_bad_write_config_without_a_traceback(
+    tmp_path, capsys, data
+):
+    path = tmp_path / "write.json"
+    if data is not None:
+        path.write_text(data, encoding="utf-8")
+        os.chmod(str(path), 0o600)
+
+    code = sidecar.main(["write", BASE, str(path)], fetch=WriteFetch())
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert "usage" in captured.err.lower()
+    assert "Traceback" not in captured.err
+    assert str(path) not in captured.err

@@ -452,6 +452,51 @@ def test_start_sidecar_mounts_an_idor_config_read_only(tmp_path):
             assert forbidden not in token, (forbidden, argv)
 
 
+def test_start_sidecar_mounts_a_write_config_read_only(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"sidecar123\n", b"", False)])
+    script = tmp_path / "sidecar.py"
+    script.write_text("")
+    config = tmp_path / "write.json"
+    config.write_text("{}")
+    os.chmod(str(config), 0o600)
+
+    DockerRunner(runner=fake, uid=501, gid=20).start_sidecar(
+        "pry-abc", "pry-sidecar", script, write_config_path=config
+    )
+
+    argv, _ = fake.calls[0]
+    _pair(argv, "-v", "%s:/pry-config/write.json:ro" % config)
+    _pair(argv, "-v", "%s:/pry/sidecar.py:ro" % script)
+    _assert_security(argv)
+    assert "-p" not in argv
+    assert "-P" not in argv
+
+
+def test_start_sidecar_mounts_the_idor_and_write_configs_together(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"sidecar123\n", b"", False)])
+    script = tmp_path / "sidecar.py"
+    script.write_text("")
+    idor = tmp_path / "idor.json"
+    idor.write_text("{}")
+    os.chmod(str(idor), 0o600)
+    write = tmp_path / "write.json"
+    write.write_text("{}")
+    os.chmod(str(write), 0o600)
+
+    DockerRunner(runner=fake, uid=501, gid=20).start_sidecar(
+        "pry-abc",
+        "pry-sidecar",
+        script,
+        config_path=idor,
+        write_config_path=write,
+    )
+
+    argv, _ = fake.calls[0]
+    _pair(argv, "-v", "%s:/pry-config/idor.json:ro" % idor)
+    _pair(argv, "-v", "%s:/pry-config/write.json:ro" % write)
+    _assert_security(argv)
+
+
 def test_start_sidecar_without_a_config_mounts_no_config(tmp_path):
     fake = FakeRunner([CommandResult(0, b"sidecar123\n", b"", False)])
     script = tmp_path / "sidecar.py"
