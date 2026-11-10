@@ -19,9 +19,10 @@ credentials. P5 read-only signed proof bundles implemented for local and live re
 EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans and
 configured live IDOR checks are implemented for URLs with a P1 token; configured local IDOR
 runs in the sandbox. Local Level 1 SSRF and bounded local rate-limit observations are
-implemented with `--confirm`. IDOR discovery, exposed database rules, live write-based checks,
-live SSRF, live rate-limit probing, Level 2, and hosted/public reports are not started. A clean
-P3 result is `NOT_REPRODUCED`, never "secure."
+implemented with `--confirm`. Opt-in response header observations are implemented for local and
+live scans. IDOR discovery, exposed database rules, live write-based checks, live SSRF, live
+rate-limit probing, Level 2, and hosted/public reports are not started. A clean P3 result is
+`NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -129,10 +130,10 @@ codes: 0 for no EXPOSED, 1 for any EXPOSED, 2 for usage/sandbox errors.
 then runs the same four read-only probes from the host. There is no Docker sandbox for a live
 target; the token is the authorization.
 
-- GET-only; no `Authorization`/`Cookie`; no writes; 4–6 requests.
+- GET-only; no `Authorization`/`Cookie`; no writes; 4–6 requests, plus one for `--headers`.
 - CORS, verbose errors, exposed secret files, and declared `--endpoint` paths; same verdict
   rules as a local scan.
-- Results are signed and reportable with `--report`.
+- Results are signed and reportable with `--report`; `--headers` adds an unsigned observation.
 - A missing, invalid, or wrong-target token exits 2 before any request.
 - Rate-limit probing, SSRF, write-based checks, and levels 1–2 are not implemented.
 
@@ -182,6 +183,24 @@ results, proofs, reports, logs, or errors.
 
 No discovery and no non-configured sweep. The result is about the declared object pair, not a
 global IDOR conclusion.
+
+## Response Header Observations
+
+```bash
+pry scan ./my-app --headers
+pry scan https://example.com --token <token> --headers
+```
+
+One GET to `/`; the response is checked for `Content-Security-Policy`,
+`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`,
+`Cross-Origin-Opener-Policy`, and `Strict-Transport-Security` (HTTPS only). The result is an
+unsigned `OBSERVED` hardening observation with `missing`/`present` lists, or `UNVERIFIED` on
+transport failure.
+
+This is **not a verdict**: it is not `EXPOSED`, is not signed, and does not change the exit
+code. A present header is not proof of security, a missing one is not proof of exploitability,
+and a CDN/proxy may be the one setting them. Local and live; no auth, no writes, no new
+confirmation.
 
 ## Local SSRF (Level 1)
 
@@ -268,7 +287,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local configured IDOR; P4 Level 1 local SSRF + rate-limit observation
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + header observations; P4 Level 1 local SSRF + rate-limit observation
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -324,6 +343,9 @@ pry scan ./my-app --level 1 --confirm \
 pry scan ./my-app --level 1 --confirm \
   --rate-limit-endpoint /login --rate-limit-count 10
 
+# Response header observation (hardening, not a verdict)
+pry scan ./my-app --headers
+
 # Verify a signed proof bundle
 pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
 
@@ -358,9 +380,9 @@ Pry implements a strict ownership gate with:
    The local config is mounted read-only into the sandbox and removed afterward. Stored headers
    redact auth/cookie/API-key values.
 8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is
-   the only EXPOSED condition. The rate-limit probe is a bounded local hardening observation,
-   not a verdict. Live SSRF, live rate-limit, Level 2, and write-based checks are not
-   implemented.
+   the only EXPOSED condition. The rate-limit probe and header check are hardening
+   observations, not verdicts. Live SSRF, live rate-limit, Level 2, and write-based checks are
+   not implemented.
 9. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence. The
    report shows hardening observations separately from verdicts.
 10. Absence of a reproduced finding is never reported as "secure".

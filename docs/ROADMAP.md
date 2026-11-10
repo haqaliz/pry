@@ -33,13 +33,15 @@ is offline; the manual owner-domain check remains.
 | M1.3 | `pry scan <target>` CLI | Level 0 only; local and live read-only; exit code reflects verdict; JSON output byte-stable |
 | M1.4 | First real finding on an app you own | Published as a case study, with ETHICS.md's disclosure process followed |
 
-Phase 1 status (2026-11-08): M1.1 partial — CORS with credentials, verbose error leakage,
+Phase 1 status (2026-11-11): M1.1 partial — CORS with credentials, verbose error leakage,
 exposed secret files, and declared-protected endpoints returning 200 JSON without credentials
 are implemented for local repos. Configured live and local IDOR are implemented (two
-identities, two objects, 0600 config; the local config is mounted read-only). Endpoint
-discovery, IDOR discovery, exposed database rules, and header-only checks are not. M1.3 local and live read-only `pry scan` works; write/levels
-1–2 remain. M1.2 is done for local and live read-only findings — every `EXPOSED` writes an
-Ed25519-signed bundle; live replay remains P5. M1.4 is not started.
+identities, two objects, 0600 config; the local config is mounted read-only). Opt-in header
+observations report missing/present recommended headers as an unsigned hardening observation.
+Endpoint discovery, IDOR discovery, and exposed database rules are not. M1.3 local and live
+read-only `pry scan` works; write/levels 1–2 remain. M1.2 is done for local and live read-only
+findings — every `EXPOSED` writes an Ed25519-signed bundle; live replay remains P5. M1.4 is not
+started.
 
 ## Phase 2: Intensity levels and live targets (weeks 8-12)
 

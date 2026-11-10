@@ -43,6 +43,9 @@
   proves the app fetched an internal URL, not arbitrary external egress. No live SSRF.
 - The local rate-limit observation is a bounded sample (1–20 GETs) and a hardening observation,
   not a verdict. It does not run against a live target; a missing limit is not `EXPOSED`.
+- The opt-in header observation is one GET to `/` on a local or live scan. Missing or present
+  recommended headers are a hardening observation, not a verdict or proof. A CDN or proxy may
+  set them, so the result quotes the response and claims nothing global.
 - Level 2 is write-based confirmation. It runs only against a sandbox or staging copy by
   default. Against a live target it needs an additional explicit confirmation beyond the
   standard warning.
@@ -52,7 +55,7 @@
 ## Live read-only scans
 
 - Require a P1 token for the target origin; validate it before any request.
-- GET only; no `Authorization`/`Cookie`; no writes; 4–6 requests.
+- GET only; no `Authorization`/`Cookie`; no writes; 4–6 requests, plus one for `--headers`.
 - Not a load test: live SSRF, live rate-limit probing, Level 2, and write-based checks are not
   implemented. Local Level 1 SSRF and the bounded local rate-limit observation are separate and
   require `--confirm`.

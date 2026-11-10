@@ -281,3 +281,26 @@ def test_capability_roadmap_local_idor_status():
 def test_architecture_local_idor_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
     assert "local idor" in text
+
+
+def test_readme_header_observations_are_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Response Header Observations" in text
+    assert "not a verdict" in text
+    assert "HTTPS only" in text
+    assert "unsigned observation" in text
+
+
+def test_claude_header_observation_status():
+    text = " ".join(_read("CLAUDE.md").split()).lower()
+    assert "response header observations implemented" in text
+
+
+def test_capability_roadmap_header_observation_status():
+    text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split()).lower()
+    assert "header observations" in text
+
+
+def test_architecture_header_observation_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
+    assert "response headers are an observation" in text

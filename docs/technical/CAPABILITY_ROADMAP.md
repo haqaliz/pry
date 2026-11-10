@@ -2,17 +2,17 @@
 
 Engine capabilities in build order. Each lands test-first. P1 ownership gate implemented;
 P2 local intake implemented; P3 read-only probe slice implemented (including declared
-unauthenticated endpoints); P5 read-only signed bundles implemented for local and live
-read-only findings; P6 local report/corpus implemented; live read-only scans implemented;
-configured live IDOR implemented; local IDOR implemented; local Level 1 SSRF and rate-limit
-observation implemented; live write-based checks, live SSRF, live rate-limit, Level 2, hosted
-reports, and the rest of P5 onward are not.
+unauthenticated endpoints and opt-in header observations); P5 read-only signed bundles
+implemented for local and live read-only findings; P6 local report/corpus implemented; live
+read-only scans implemented; configured live IDOR implemented; local IDOR implemented; local
+Level 1 SSRF and rate-limit observation implemented; live write-based checks, live SSRF, live
+rate-limit, Level 2, hosted reports, and the rest of P5 onward are not.
 
 | ID | Capability | Depends on | Guardrail tie-in |
 |---|---|---|---|
 | **P1** | **Ownership verification.** DNS TXT or well-known-file proof that the user controls the target (account linking deferred). Gates every level, including read-only. | none | Constraint 1 |
 | **P2** | **Target intake.** Local repo booted in an isolated Docker sandbox (static + npm Node/Next first); records a pinned snapshot. Live read-only scans implemented; live write/recorded intake deferred. | P1 | Sandbox before live |
-| **P3** | **Floor probe suite (read-only, always on).** First slice: CORS with credentials, verbose error leakage, exposed secret files, declared unauthenticated endpoints; live read-only and configured live/local IDOR via a P1 token. Endpoint discovery, IDOR discovery, exposed DB/open rules, and header-only findings deferred. | P1, P2 | Constraint 2, read-only default |
+| **P3** | **Floor probe suite (read-only, always on).** First slice: CORS with credentials, verbose error leakage, exposed secret files, declared unauthenticated endpoints; live read-only and configured live/local IDOR via a P1 token; opt-in header observations. Endpoint discovery, IDOR discovery, exposed DB/open rules, and header-only findings deferred. | P1, P2 | Constraint 2, read-only default |
 | **P4** | **Intensity-gated probe suite.** Level 1: non-mutating SSRF probes, rate-limit probing. Level 2: write-based confirmation, sandbox/staging only by default, extra confirmation for a live target. Local SSRF and rate-limit observation implemented; live SSRF/live rate-limit/Level 2 deferred. | P3 | Constraints 2 and 6 |
 | **P5** | **Exploit proof capture and verdict.** `EXPOSED` / `NOT_REPRODUCED` / `UNVERIFIED`, each backed by a signed, redacted request/response record. Read-only local and live slice implemented with Ed25519 bundles; live replay and P4 integration deferred. | P3, P4 | Constraints 3, 4, 5 — the moat |
 | **P6** | **Findings corpus and report.** Bank (target, probe, verdict, proof); generate a shareable report for the app owner. Read-only local and live report/corpus implemented; hosted/public reports deferred. | P5 | Measured, not guessed |
