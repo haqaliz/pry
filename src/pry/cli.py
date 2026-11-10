@@ -25,6 +25,8 @@ from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
 from pry.probe.idor import load_idor_config
 from pry.probe.live import scan_live
 from pry.probe.rate_limit import (
+    LIVE_RATE_LIMIT_DEFAULT_COUNT,
+    LIVE_RATE_LIMIT_MAX_COUNT,
     RATE_LIMIT_DEFAULT_COUNT,
     validate_rate_limit,
 )
@@ -38,6 +40,7 @@ _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHO
 CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
 SSRF_CONFIG_REQUIRED = "SSRF_CONFIG_REQUIRED"
 SSRF_REQUIRES_LEVEL1 = "SSRF_REQUIRES_LEVEL1"
+SSRF_REQUIRES_LOCAL = "SSRF_REQUIRES_LOCAL"
 RATE_LIMIT_CONFIG_REQUIRED = "RATE_LIMIT_CONFIG_REQUIRED"
 RATE_LIMIT_REQUIRES_LEVEL1 = "RATE_LIMIT_REQUIRES_LEVEL1"
 LEVEL1_CHECK_REQUIRED = "LEVEL1_CHECK_REQUIRED"
@@ -77,8 +80,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         choices=[0, 1, 2],
         help=(
-            "Intensity level (0 floor, 1 local SSRF and rate-limit; "
-            "2 not implemented)"
+            "Intensity level (0 floor, 1 local SSRF/rate-limit and live "
+            "rate-limit; 2 not implemented)"
         ),
     )
     scan.add_argument(
@@ -129,13 +132,14 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--rate-limit-endpoint",
         metavar="PATH",
-        help="Declared local endpoint for the level 1 rate-limit observation",
+        help="Declared endpoint for the level 1 rate-limit observation",
     )
     scan.add_argument(
         "--rate-limit-count",
         type=int,
         metavar="N",
-        help="Requests for the rate-limit observation, 1-20 (default: 10)",
+        help="Requests for the rate-limit observation, 1-20 local, 1-5 live "
+        "(default: 10 local, 5 live)",
     )
     scan.add_argument(
         "--report",
@@ -513,26 +517,82 @@ def _scan_target_path(args) -> int:
 
 
 def _scan_target_url(args) -> int:
-    if (
-        args.level == 1
-        or args.ssrf_endpoint is not None
-        or args.ssrf_parameter is not None
-        or args.rate_limit_endpoint is not None
+    if args.level == 2:
+        _print_error(
+            OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented"),
+            args.json,
+        )
+        return 2
+
+    has_ssrf_flags = (
+        args.ssrf_endpoint is not None or args.ssrf_parameter is not None
+    )
+    has_rate_limit_flags = (
+        args.rate_limit_endpoint is not None
         or args.rate_limit_count is not None
-    ):
+    )
+    if args.level == 1 and not args.confirm:
         _print_error(
             ProbeError(
-                LEVEL1_REQUIRES_LOCAL,
-                "level 1 expanded checks run only against a local path; live "
-                "SSRF and rate-limit checks are not implemented",
+                CONFIRMATION_REQUIRED,
+                "level 1 is expanded read-only work and requires --confirm",
+            ),
+            args.json,
+        )
+        return 2
+    if has_ssrf_flags:
+        cause = (
+            SSRF_REQUIRES_LOCAL
+            if args.level == 1
+            else SSRF_REQUIRES_LEVEL1
+        )
+        _print_error(
+            ProbeError(
+                cause,
+                "SSRF checks are local-only; live rate-limit is available at "
+                "level 1 with --confirm",
             ),
             args.json,
         )
         return 2
 
-    if args.level != 0:
+    rate_limit_config = None
+    if args.level == 1:
+        if args.rate_limit_count is not None and args.rate_limit_endpoint is None:
+            _print_error(
+                ProbeError(
+                    RATE_LIMIT_CONFIG_REQUIRED,
+                    "level 1 rate-limit checks require --rate-limit-endpoint",
+                ),
+                args.json,
+            )
+            return 2
+        if args.rate_limit_endpoint is None:
+            _print_error(
+                ProbeError(
+                    LEVEL1_CHECK_REQUIRED,
+                    "live level 1 requires --rate-limit-endpoint",
+                ),
+                args.json,
+            )
+            return 2
+        try:
+            rate_limit_config = validate_rate_limit(
+                args.rate_limit_endpoint,
+                args.rate_limit_count
+                if args.rate_limit_count is not None
+                else LIVE_RATE_LIMIT_DEFAULT_COUNT,
+                max_count=LIVE_RATE_LIMIT_MAX_COUNT,
+            )
+        except ProbeError as exc:
+            _print_error(exc, args.json)
+            return 2
+    elif has_rate_limit_flags:
         _print_error(
-            OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented"),
+            ProbeError(
+                RATE_LIMIT_REQUIRES_LEVEL1,
+                "rate-limit observations require --level 1 and --confirm",
+            ),
             args.json,
         )
         return 2
@@ -556,6 +616,8 @@ def _scan_target_url(args) -> int:
     }
     if args.headers:
         live_kwargs["headers"] = True
+    if rate_limit_config is not None:
+        live_kwargs["rate_limit_config"] = rate_limit_config
     try:
         outcome = scan_live(args.target, token, **live_kwargs)
     except (OwnershipError, IntakeError, ProbeError, ProofError) as exc:

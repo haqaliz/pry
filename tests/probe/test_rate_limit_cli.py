@@ -322,12 +322,11 @@ def test_level2_is_refused_before_any_rate_limit_work(
 @pytest.mark.parametrize(
     "extra",
     [
-        ["--level", "1", "--confirm"] + RATE_ARGV,
         RATE_ARGV,
         ["--rate-limit-count", "5"],
     ],
 )
-def test_a_url_refuses_level1_or_rate_limit_flags(monkeypatch, capsys, extra):
+def test_a_url_at_level0_refuses_rate_limit_flags(monkeypatch, capsys, extra):
     code, out, local, live = _gate(
         monkeypatch,
         capsys,
@@ -335,7 +334,7 @@ def test_a_url_refuses_level1_or_rate_limit_flags(monkeypatch, capsys, extra):
     )
 
     assert code == 2
-    assert "LEVEL1_REQUIRES_LOCAL" in out
+    assert "RATE_LIMIT_REQUIRES_LEVEL1" in out
     assert local.calls == []
     assert live.calls == []
 

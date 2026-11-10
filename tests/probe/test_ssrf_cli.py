@@ -355,14 +355,14 @@ def test_invalid_ssrf_config_never_scans(repo, monkeypatch, capsys, extra):
 
 
 @pytest.mark.parametrize(
-    "extra",
+    "extra,cause",
     [
-        ["--level", "1", "--confirm"] + SSRF_ARGV,
-        ["--level", "1"],
-        ["--level", "0"] + SSRF_ARGV,
+        (["--level", "1", "--confirm"] + SSRF_ARGV, "SSRF_REQUIRES_LOCAL"),
+        (["--level", "1"], "CONFIRMATION_REQUIRED"),
+        (["--level", "0"] + SSRF_ARGV, "SSRF_REQUIRES_LEVEL1"),
     ],
 )
-def test_a_url_refuses_level1_or_ssrf_flags(monkeypatch, capsys, extra):
+def test_a_url_refuses_live_ssrf_flags(monkeypatch, capsys, extra, cause):
     code, out, local, live = _gate(
         monkeypatch,
         capsys,
@@ -370,7 +370,7 @@ def test_a_url_refuses_level1_or_ssrf_flags(monkeypatch, capsys, extra):
     )
 
     assert code == 2
-    assert "LEVEL1_REQUIRES_LOCAL" in out
+    assert cause in out
     assert local.calls == []
     assert live.calls == []
 

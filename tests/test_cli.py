@@ -174,7 +174,6 @@ def test_scan_valid_token_calls_scan_live(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "level,cause",
     [
-        ("1", "LEVEL1_REQUIRES_LOCAL"),
         ("2", "INTENSITY_INSUFFICIENT"),
     ],
 )
