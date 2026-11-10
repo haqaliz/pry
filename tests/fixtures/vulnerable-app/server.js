@@ -2,6 +2,7 @@ const http = require("http");
 
 const port = Number(process.env.PORT) || 3000;
 let rateHits = 0;
+let writeBody = "";
 
 http
   .createServer((req, res) => {
@@ -9,6 +10,24 @@ http
     if (origin) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Credentials", "true");
+    }
+
+    if (req.url === "/api/write" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        writeBody = body;
+        res.writeHead(201, { "Content-Type": "application/json" });
+        res.end('{"created":true}');
+      });
+      return;
+    }
+    if (req.url === "/api/write" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(writeBody || "{}");
+      return;
     }
 
     const cookie = req.headers.cookie || "";

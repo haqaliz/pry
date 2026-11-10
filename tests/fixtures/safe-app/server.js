@@ -15,6 +15,11 @@ http
       res.end("ignored\n");
       return;
     }
+    if (req.url === "/api/write") {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end('{"error":"unauthorized"}');
+      return;
+    }
     if (req.url === "/api/users" || req.url === "/api/private") {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end('{"error":"unauthorized"}');
