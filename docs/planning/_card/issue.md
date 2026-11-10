@@ -1,53 +1,51 @@
-# Rate-Limit Observation (P4 Level 1, local)
+# Local IDOR (P3 remainder)
 
 - **Type:** feat
-- **Slug:** `rate-limit`
+- **Slug:** `local-idor`
 - **Owner:** aliz
 - **Source:** inline brief. No GitHub issue.
-- **Capability:** P4 Level 1 rate-limit observation, local only.
+- **Capability:** P3 remainder — configured local IDOR/access control.
 
 ## Brief
 
-Send a bounded series of GETs to a declared endpoint in the local sandbox and record whether
-the app throttles. This is a **hardening observation**, not an `EXPOSED` verdict: absence of a
-rate limit is not a reproduced request/response pair demonstrating data exposure. The report
-gets an Observations section; the verdict counts and signed proof bundles stay reserved for
-`EXPOSED`.
+Live IDOR is implemented. The safe sandbox path still lacks the companion check: two identities,
+two objects, and a cross-request that proves identity A can read identity B's object. Run the
+same three GETs inside the local probe sidecar, with the credential config mounted read-only at
+0600. The result is a normal verdict: `EXPOSED` only when both controls pass and A→B returns 2xx
+JSON; signed and reportable like any other finding.
 
 ## Flow
 
 ```bash
-pry scan ./my-app --level 1 --confirm \
-  --rate-limit-endpoint /login --rate-limit-count 10
+chmod 600 idor.json
+pry scan ./my-app --idor-config idor.json
 ```
 
-- 429/503/`Retry-After` at any request → `THROTTLED`.
-- All 2xx in the bounded series → `OBSERVED` ("no throttling seen in N requests").
-- Transport/control failure → `UNVERIFIED`.
-- No `EXPOSED` from this check; no proof bundle; exit code stays based on verdicts.
+The config has the same shape as live IDOR. Pry validates it, writes a 0600 temp copy, mounts
+it read-only into the probe sidecar at `/pry-config/idor.json`, runs the three GETs, parses the
+redacted result, and removes the temp file. The original path and credentials never appear in
+results, proofs, reports, logs, or errors.
 
 ## Scope
 
-- Level 1 + `--confirm`, local only; path-only endpoint; count 1–20 (default 10).
-- Sequential GETs, no auth, 0.1s spacing, bounded total time; no POST/body.
-- Observation in `results.json` and the HTML report; CLI/JSON output.
-- Level 1 may run SSRF and/or rate-limit; at least one is required.
-- Tests: sidecar/scan/CLI/report; Docker fixture with a throttled and an unthrottled endpoint.
+- Local `--idor-config` at level 0; no `--confirm` (read-only configured check).
+- Reuse the live IDOR probe logic; move the core to a sidecar-callable function.
+- Config 0600, temp copy 0600, read-only mount, cleanup.
+- EXPOSED/NOT_REPRODUCED/UNVERIFIED with both controls; redacted auth/cookie headers.
+- Signed proof/report for EXPOSED.
+- Tests: sidecar, scan, CLI, Docker fixture with two identities/objects.
 
 ## Out of scope
 
-- Live rate-limit probing (load/lockout risk).
-- Treating "no rate limit" as `EXPOSED`.
-- Level 2/writes, auth, distributed/parallel probing, discovery.
+- IDOR discovery, non-configured IDOR, live changes, DB rules, level 2/writes.
 - Hosted reports.
 
 ## Acceptance criteria
 
-- All 2xx in N requests → `OBSERVED`, report shows it, no proof bundle, exit 0/1 unchanged.
-- A 429/503 at request K → `THROTTLED` with K and status.
-- Transport error → `UNVERIFIED`.
-- Missing `--confirm`, level 0, URL, or count out of bounds → exit 2.
-- Level 1 with neither SSRF nor rate-limit config → exit 2.
-- Observations never appear as `EXPOSED` or as signed proof bundles.
+- Local A→A 200, B→B 200, A→B 200 JSON → EXPOSED, signed, report.
+- A→B 403 → NOT_REPRODUCED; B→B 403 → UNVERIFIED.
+- Config 0644/missing/absolute paths/header injection → exit 2, no scan.
+- Credentials/config path absent from outputs; temp config removed.
+- No config → existing local results unchanged.
 - Default suite offline; Docker test opt-in.
 - No "secure" claim.
