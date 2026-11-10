@@ -11,6 +11,28 @@ http
       res.setHeader("Access-Control-Allow-Credentials", "true");
     }
 
+    const cookie = req.headers.cookie || "";
+    if (req.url === "/api/items/1" && cookie.includes("session=a")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"id":1,"owner":"a"}');
+      return;
+    }
+    if (req.url === "/api/items/2" && cookie.includes("session=b")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"id":2,"owner":"b"}');
+      return;
+    }
+    if (req.url === "/api/items/2" && cookie.includes("session=a")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"id":2,"owner":"b"}');
+      return;
+    }
+    if (req.url.startsWith("/api/items/")) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end('{"error":"forbidden"}');
+      return;
+    }
+
     if (req.url === "/api/users") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end('{"users":[{"id":1,"email":"owner@example.invalid"}]}');
