@@ -28,7 +28,10 @@ from pry.probe.results import (
     ProbeResult,
     summarize,
 )
+from pry.probe.idor import IdorConfig
+from pry.probe.rate_limit import RateLimitConfig
 from pry.probe.scan import INVALID_ENDPOINT, ScanOutcome
+from pry.probe.ssrf import SsrfConfig
 from pry.proof import (
     PROOF_FAILED,
     ProofError,
@@ -58,6 +61,9 @@ class FakeDocker:
         self.calls = []
         self.networks = []
         self.sidecars = []
+        self.config_paths = []
+        self.config_modes = []
+        self.config_payloads = []
 
     def create_network(self, name):
         self.calls.append(("create_network", name))
@@ -70,10 +76,27 @@ class FakeDocker:
         if name in self.networks:
             self.networks.remove(name)
 
-    def start_sidecar(self, network, name, script):
-        self.calls.append(("start_sidecar", network, name, str(script)))
+    def start_sidecar(self, network, name, script, config_path=None):
+        call = ("start_sidecar", network, name, str(script))
+        if config_path is not None:
+            call = call + (str(config_path),)
+            self.config_paths.append(str(config_path))
+            self.config_modes.append(
+                stat.S_IMODE(Path(config_path).stat().st_mode)
+            )
+            self.config_payloads.append(
+                json.loads(Path(config_path).read_text(encoding="utf-8"))
+            )
+        self.calls.append(call)
         self.sidecars.append(name)
         return "sidecar123"
+
+    def start_callback_sidecar(self, network, name, source_dir):
+        self.calls.append(
+            ("start_callback_sidecar", network, name, str(source_dir))
+        )
+        self.sidecars.append(name)
+        return "callback123"
 
     def remove(self, container):
         self.calls.append(("remove", container))
@@ -84,6 +107,11 @@ class FakeDocker:
 
     def exec(self, container, command, timeout=10):
         self.calls.append(("exec", container, list(command), timeout))
+        if command[1] == "/pry/ssrf_probe.py":
+            payload = self.responses.get("ssrf") or {}
+            return CommandResult(
+                0, json.dumps(payload).encode("utf-8"), b"", False
+            )
         probe = command[2]
         response = self.responses.get(probe)
         if response is None:
@@ -755,3 +783,222 @@ def test_a_corpus_failure_warns_without_failing_the_scan(
         NOT_REPRODUCED: 2,
         UNVERIFIED: 0,
     }
+
+
+IDOR_SECRET_A = "scan-alice-session"
+IDOR_SECRET_B = "scan-bob-session"
+IDOR = IdorConfig(
+    headers_a={"Cookie": "sid=" + IDOR_SECRET_A},
+    headers_b={"Cookie": "sid=" + IDOR_SECRET_B},
+    object_a="/api/orders/1",
+    object_b="/api/orders/2",
+)
+SSRF_CONFIG = SsrfConfig(endpoint="/api/fetch", parameter="url")
+RATE_LIMIT_CONFIG = RateLimitConfig(endpoint="/api/ping", count=3)
+
+
+def _run_texts(outcome):
+    texts = [outcome.results_path.read_text(encoding="utf-8")]
+    texts.extend(
+        Path(proof).read_text(encoding="utf-8")
+        for proof in _proof_files(outcome.results_path.parent)
+    )
+    return texts
+
+
+def _assert_no_idor_leak(outcome, docker):
+    temp_path = docker.config_paths[0]
+    for text in _run_texts(outcome):
+        assert IDOR_SECRET_A not in text
+        assert IDOR_SECRET_B not in text
+        assert temp_path not in text
+
+
+def test_scan_mounts_a_0600_temp_copy_of_the_idor_config(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker(responses={"idor": _payload("idor", NOT_REPRODUCED)})
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(
+        repo, out=tmp_path / "run", docker=docker, idor_config=IDOR
+    )
+
+    started = [call for call in docker.calls if call[0] == "start_sidecar"]
+    assert len(docker.config_paths) == 1
+    assert started[0][-1] == docker.config_paths[0]
+    assert docker.config_modes == [0o600]
+    assert docker.config_payloads == [
+        {
+            "identity_a": {"headers": IDOR.headers_a},
+            "identity_b": {"headers": IDOR.headers_b},
+            "object_a": IDOR.object_a,
+            "object_b": IDOR.object_b,
+        }
+    ]
+    exec_calls = [call for call in docker.calls if call[0] == "exec"]
+    assert exec_calls[-1][2] == [
+        "python",
+        "/pry/sidecar.py",
+        "idor",
+        BASE,
+        "/pry-config/idor.json",
+    ]
+    assert outcome.results[-1].probe == "idor"
+    assert outcome.summary == {
+        EXPOSED: 0,
+        NOT_REPRODUCED: 4,
+        UNVERIFIED: 0,
+    }
+    assert not Path(docker.config_paths[0]).exists()
+    _assert_no_idor_leak(outcome, docker)
+
+
+def test_scan_runs_idor_after_floor_unauth_ssrf_and_rate_limit(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker(
+        responses={
+            "idor": _payload("idor", NOT_REPRODUCED),
+            "ssrf": {
+                "hit": True,
+                "cause": None,
+                "request": {
+                    "method": "GET",
+                    "url": BASE + "/api/fetch?url=http%3A%2F%2Fpry-callback%3A9000%2Fn",
+                    "headers": {"User-Agent": "pry/0.1"},
+                },
+                "app_response": {"status": 200, "headers": {}, "body": "ok"},
+                "callback_hit": {
+                    "method": "GET",
+                    "path": "/n",
+                    "headers": {"User-Agent": "python-urllib"},
+                },
+            },
+        }
+    )
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(
+        repo,
+        out=tmp_path / "run",
+        docker=docker,
+        endpoints=["/api/users"],
+        ssrf_config=SSRF_CONFIG,
+        rate_limit_config=RATE_LIMIT_CONFIG,
+        idor_config=IDOR,
+    )
+
+    kinds = [
+        "ssrf" if call[2][1] == "/pry/ssrf_probe.py" else call[2][2]
+        for call in docker.calls
+        if call[0] == "exec"
+    ]
+    assert kinds == [
+        "cors",
+        "errors",
+        "secrets",
+        "unauth",
+        "ssrf",
+        "rate_limit",
+        "idor",
+    ]
+    assert [result.probe for result in outcome.results] == [
+        "cors",
+        "errors",
+        "secrets",
+        "unauth",
+        "ssrf",
+        "idor",
+    ]
+    assert [observation["probe"] for observation in outcome.observations] == [
+        "rate_limit"
+    ]
+
+
+def test_scan_signs_an_exposed_idor_result_without_leaking_credentials(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker(responses={"idor": _payload("idor", EXPOSED)})
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(
+        repo, out=tmp_path / "run", docker=docker, idor_config=IDOR
+    )
+
+    idor = outcome.results[-1]
+    assert idor.probe == "idor"
+    assert idor.verdict == EXPOSED
+    assert idor.proof is not None
+    payload, _fingerprint = verify_bundle(load_bundle(idor.proof))
+    assert payload["finding"]["probe"] == "idor"
+    assert payload["finding"]["verdict"] == EXPOSED
+    assert outcome.summary[EXPOSED] == 1
+    assert not Path(docker.config_paths[0]).exists()
+    _assert_no_idor_leak(outcome, docker)
+
+
+def test_scan_removes_the_idor_temp_config_after_a_probe_failure(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+    monkeypatch.setattr(scan, "ProbeClient", ExplodingClient)
+
+    with pytest.raises(RuntimeError):
+        scan.scan_local(
+            repo, out=tmp_path / "run", docker=docker, idor_config=IDOR
+        )
+
+    assert len(docker.config_paths) == 1
+    assert not Path(docker.config_paths[0]).exists()
+    assert docker.networks == []
+
+
+class InterruptingClient:
+    def __init__(self, docker, sidecar, base_url):
+        pass
+
+    def run_all(self):
+        raise KeyboardInterrupt
+
+
+def test_scan_removes_the_idor_temp_config_after_an_interrupt(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+    monkeypatch.setattr(scan, "ProbeClient", InterruptingClient)
+
+    with pytest.raises(KeyboardInterrupt):
+        scan.scan_local(
+            repo, out=tmp_path / "run", docker=docker, idor_config=IDOR
+        )
+
+    assert len(docker.config_paths) == 1
+    assert not Path(docker.config_paths[0]).exists()
+    assert docker.networks == []
+
+
+def test_scan_without_an_idor_config_mounts_nothing_and_runs_no_idor(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(repo, out=tmp_path / "run", docker=docker)
+
+    started = [call for call in docker.calls if call[0] == "start_sidecar"]
+    assert docker.config_paths == []
+    assert not any("/pry-config" in str(call) for call in started)
+    exec_calls = [call for call in docker.calls if call[0] == "exec"]
+    assert [call[2] for call in exec_calls] == [
+        ["python", "/pry/sidecar.py", "cors", BASE],
+        ["python", "/pry/sidecar.py", "errors", BASE],
+        ["python", "/pry/sidecar.py", "secrets", BASE],
+    ]
+    assert [result.probe for result in outcome.results] == [
+        "cors",
+        "errors",
+        "secrets",
+    ]

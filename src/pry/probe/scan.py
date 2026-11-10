@@ -1,7 +1,9 @@
 """Scan a local repository in the sandbox and write results.json."""
 
 import json
+import os
 import secrets
+import tempfile
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Optional
@@ -60,6 +62,32 @@ def sidecar_script_path() -> Path:
 
 def callback_source_dir() -> Path:
     return Path(__file__).with_name("callback_server.py").parent
+
+
+def _write_idor_config(config) -> str:
+    """Write the declared pair to a 0600 temp file for the read-only mount."""
+    payload = {
+        "identity_a": {"headers": dict(config.headers_a)},
+        "identity_b": {"headers": dict(config.headers_b)},
+        "object_a": config.object_a,
+        "object_b": config.object_b,
+    }
+    handle, path = tempfile.mkstemp(prefix="pry-idor-", suffix=".json")
+    try:
+        os.fchmod(handle, 0o600)
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream)
+    except BaseException:
+        try:
+            os.close(handle)
+        except OSError:
+            pass
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise
+    return path
 
 
 def _probe_payload(result):
@@ -265,6 +293,7 @@ def scan_local(
     endpoints=None,
     ssrf_config=None,
     rate_limit_config=None,
+    idor_config=None,
 ):
     _validated_path(path)
     endpoints = validate_endpoints(endpoints)
@@ -273,13 +302,22 @@ def scan_local(
     results = []
     observations = []
     corpus_error = None
+    config_path = None
 
     def on_ready(handle: SandboxHandle) -> None:
         sidecar = "pry-probe-" + handle.sandbox_id
         app_base = "http://app:%d" % handle.port
         failure = None
         try:
-            runner.start_sidecar(network, sidecar, sidecar_script_path())
+            if config_path is None:
+                runner.start_sidecar(network, sidecar, sidecar_script_path())
+            else:
+                runner.start_sidecar(
+                    network,
+                    sidecar,
+                    sidecar_script_path(),
+                    config_path=config_path,
+                )
             client = ProbeClient(runner, sidecar, app_base)
             results.extend(client.run_all())
             for endpoint in endpoints:
@@ -300,6 +338,8 @@ def scan_local(
                         rate_limit_config.endpoint, rate_limit_config.count
                     )
                 )
+            if idor_config is not None:
+                results.append(client.run_idor())
         except BaseException as exc:
             failure = exc
             raise
@@ -313,6 +353,8 @@ def scan_local(
     runner.create_network(network)
     failure = None
     try:
+        if idor_config is not None:
+            config_path = _write_idor_config(idor_config)
         intake_result = intake(
             path,
             out=out,
@@ -330,6 +372,11 @@ def scan_local(
         failure = exc
         raise
     finally:
+        if config_path is not None:
+            try:
+                os.unlink(config_path)
+            except OSError:
+                pass
         try:
             runner.remove_network(network)
         except Exception:

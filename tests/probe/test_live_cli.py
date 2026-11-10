@@ -411,32 +411,6 @@ def test_live_scan_without_an_idor_config_lists_no_idor(
     assert [entry["probe"] for entry in data["results"]] == list(PROBES)
 
 
-def test_local_scan_with_an_idor_config_is_rejected_before_scanning(
-    tmp_path, monkeypatch, capsys
-):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    path = _write_idor_config(tmp_path)
-    local_calls = []
-    live_calls = []
-    monkeypatch.setattr(
-        "pry.cli.scan_local", lambda *a, **k: local_calls.append((a, k))
-    )
-    monkeypatch.setattr(
-        "pry.cli.scan_live", lambda *a, **k: live_calls.append((a, k))
-    )
-
-    assert main(["scan", str(repo), "--idor-config", str(path)]) == 2
-
-    out = capsys.readouterr().out
-    assert "IDOR_REQUIRES_LIVE" in out
-    assert local_calls == []
-    assert live_calls == []
-    assert str(path) not in out
-    assert SECRET_A not in out
-    assert SECRET_B not in out
-
-
 def test_live_scan_with_a_group_readable_idor_config_never_scans(
     tmp_path, monkeypatch, capsys
 ):

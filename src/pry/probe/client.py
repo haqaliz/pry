@@ -11,6 +11,7 @@ from pry.probe.rate_limit import (
 from pry.probe.results import UNVERIFIED, VERDICTS, ProbeResult
 
 SIDECAR_PATH = "/pry/sidecar.py"
+IDOR_CONFIG_PATH = "/pry-config/idor.json"
 EXEC_FAILED = "EXEC_FAILED"
 EXEC_TIMEOUT = "EXEC_TIMEOUT"
 INVALID_RESULT = "INVALID_RESULT"
@@ -71,8 +72,25 @@ class ProbeClient:
         command = ["python", SIDECAR_PATH, probe, self.base_url]
         if probe == "unauth" and endpoint is not None:
             command.append(endpoint)
+        return self._exec(probe, command, self.timeout)
+
+    def run_idor(self) -> ProbeResult:
+        """Exec the configured IDOR check; a failure is UNVERIFIED, not a raise."""
+        return self._exec(
+            "idor",
+            [
+                "python",
+                SIDECAR_PATH,
+                "idor",
+                self.base_url,
+                IDOR_CONFIG_PATH,
+            ],
+            self.timeout,
+        )
+
+    def _exec(self, probe: str, command: List[str], timeout: int) -> ProbeResult:
         try:
-            result = self.docker.exec(self.sidecar, command, timeout=self.timeout)
+            result = self.docker.exec(self.sidecar, command, timeout=timeout)
         except Exception as exc:
             return _unverified(
                 probe,
@@ -84,7 +102,7 @@ class ProbeClient:
             return _unverified(
                 probe,
                 EXEC_TIMEOUT,
-                "probe timed out after %ss" % self.timeout,
+                "probe timed out after %ss" % timeout,
                 self.base_url,
             )
         if result.returncode != 0:

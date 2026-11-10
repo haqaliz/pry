@@ -106,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--idor-config",
         metavar="FILE",
-        help="0600 JSON config with two identities and two object paths (live only)",
+        help="0600 JSON config with two identities and two object paths",
     )
     scan.add_argument(
         "--ssrf-endpoint",
@@ -388,15 +388,6 @@ def _observation_line(observation: dict) -> str:
 
 
 def _scan_target_path(args) -> int:
-    if args.idor_config:
-        _print_error(
-            ProbeError(
-                "IDOR_REQUIRES_LIVE",
-                "configured IDOR checks are live-only; pass a URL with --token",
-            )
-        )
-        return 2
-
     if args.level == 2:
         _print_error(
             OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented")
@@ -439,12 +430,12 @@ def _scan_target_path(args) -> int:
                 )
             )
             return 2
-        if not has_ssrf_flags and not has_rate_limit_flags:
+        if not has_ssrf_flags and not has_rate_limit_flags and not args.idor_config:
             _print_error(
                 ProbeError(
                     LEVEL1_CHECK_REQUIRED,
                     "level 1 requires --ssrf-endpoint and --ssrf-parameter, "
-                    "or --rate-limit-endpoint",
+                    "--rate-limit-endpoint, or --idor-config",
                 )
             )
             return 2
@@ -483,6 +474,9 @@ def _scan_target_path(args) -> int:
 
     try:
         endpoints = validate_endpoints(args.endpoint)
+        idor_config = (
+            load_idor_config(args.idor_config) if args.idor_config else None
+        )
     except ProbeError as exc:
         _print_error(exc)
         return 2
@@ -497,6 +491,8 @@ def _scan_target_path(args) -> int:
         kwargs["ssrf_config"] = ssrf_config
     if rate_limit_config is not None:
         kwargs["rate_limit_config"] = rate_limit_config
+    if idor_config is not None:
+        kwargs["idor_config"] = idor_config
     try:
         outcome = scan_local(args.target, **kwargs)
     except (IntakeError, ProbeError, ProofError) as exc:

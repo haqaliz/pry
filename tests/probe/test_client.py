@@ -366,3 +366,109 @@ def test_a_rate_limit_payload_that_tries_to_carry_a_verdict_is_unverified():
     assert result["status"] == UNVERIFIED
     assert "RATE_LIMIT_PROBE_INVALID" in result["evidence"]
     assert "verdict" not in result
+
+
+IDOR_CONFIG_PATH = "/pry-config/idor.json"
+
+
+def _idor_payload(verdict=EXPOSED, cause=None):
+    return {
+        "probe": "idor",
+        "verdict": verdict,
+        "cause": cause,
+        "evidence": "control A passed; control B passed; cross checked",
+        "request": {
+            "method": "GET",
+            "url": BASE + "/api/orders/2",
+            "headers": {"cookie": "[redacted]"},
+        },
+        "response": {
+            "status": 200,
+            "headers": {"set-cookie": "[redacted]"},
+            "body": '{"id": 2}',
+        },
+    }
+
+
+def test_run_idor_execs_the_sidecar_with_the_mounted_config():
+    fake = FakeDocker([_json(_idor_payload())])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_idor()
+
+    assert fake.calls == [
+        (
+            SIDECAR,
+            [
+                "python",
+                "/pry/sidecar.py",
+                "idor",
+                BASE,
+                IDOR_CONFIG_PATH,
+            ],
+            20,
+        )
+    ]
+    assert result == ProbeResult(**_idor_payload())
+    assert result.probe == "idor"
+    assert result.verdict == EXPOSED
+
+
+def test_run_idor_carries_the_sidecars_unverified_cause():
+    payload = _idor_payload(UNVERIFIED, "IDOR_CONTROL_FAILED")
+    payload["response"] = None
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_idor()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == "IDOR_CONTROL_FAILED"
+    assert result.response is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        CommandResult(1, b"", b"sidecar exploded", False),
+        CommandResult(125, b"", b"", False),
+        CommandResult(-1, b"", b"", True),
+    ],
+)
+def test_a_run_idor_exec_failure_or_timeout_is_unverified(command):
+    result = ProbeClient(FakeDocker([command]), SIDECAR, BASE).run_idor()
+
+    assert result.probe == "idor"
+    assert result.verdict == UNVERIFIED
+    assert result.response is None
+    assert result.cause in (EXEC_FAILED, EXEC_TIMEOUT)
+
+
+def test_a_run_idor_docker_exception_is_unverified_and_does_not_escape():
+    fake = FakeDocker([RuntimeError("docker exec exploded")])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_idor()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == EXEC_FAILED
+    assert "docker exec exploded" in result.evidence
+
+
+@pytest.mark.parametrize("stdout", [b"not json", b"", b"[1, 2]"])
+def test_invalid_idor_json_is_unverified_with_a_cause(stdout):
+    fake = FakeDocker([CommandResult(0, stdout, b"", False)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_idor()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == INVALID_RESULT
+    assert result.response is None
+
+
+def test_an_unknown_idor_verdict_is_unverified_with_a_cause():
+    payload = _idor_payload(verdict="SAFE")
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_idor()
+
+    assert result.verdict == UNVERIFIED
+    assert result.cause == UNKNOWN_VERDICT
+    assert result.response is None
