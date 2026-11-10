@@ -1,6 +1,7 @@
 # PRD — Live Rate-Limit Observation (P4 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Bounded live rate-limit observation implemented;
+  live SSRF, Level 2, and hosted reports are deferred.
 - **Owner:** aliz
 - **Slug:** `live-rate-limit`
 - **Capability:** P4 — bounded live rate-limit observation
