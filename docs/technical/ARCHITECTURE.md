@@ -3,9 +3,10 @@
 Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; P3
 read-only probes are implemented; P5 read-only signed bundles are implemented for local and
 live read-only findings; P6 local report/corpus are implemented; live read-only scans and
-configured live IDOR are implemented; local Level 1 SSRF and a bounded local rate-limit
-observation are implemented; live write-based checks, live SSRF, live rate-limit, Level 2,
-general authenticated scanning, hosted reports, and the rest of P5 are design intent.
+configured live IDOR and configured local IDOR are implemented; local Level 1 SSRF and a
+bounded local rate-limit observation are implemented; live write-based checks, live SSRF, live
+rate-limit, Level 2, general authenticated scanning, hosted reports, and the rest of P5 are
+design intent.
 
 ## Pipeline
 
@@ -36,7 +37,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints) + live read-only + configured IDOR; P4 Level 1 local SSRF (callback) + rate-limit observation
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints) + live read-only + configured live/local IDOR; P4 Level 1 local SSRF (callback) + rate-limit observation
   proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
   cli/        pry scan | verify-ownership | intake | verify-proof | report
@@ -56,10 +57,11 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Live read-only scans run from the host after P1.** No sandbox; the token authorizes the
   origin. GET-only, no credentials, 4–6 requests. The same probe functions and proof/report
   path are used, so local and live cannot drift.
-- **Configured IDOR is live-only and credential-safe.** Two identities, two object paths,
-  three GETs; the 0600 config is read once. Both controls must pass before the cross request
-  can be EXPOSED. Stored auth/cookie headers are redacted; no config path or credentials are
-  reported. No discovery or local IDOR in this slice.
+- **Configured live IDOR and local IDOR are credential-safe.** Two identities, two object
+  paths, three GETs; the 0600 config is read once. Both controls must pass before the cross
+  request can be EXPOSED. The local config is mounted read-only at `/pry-config/idor.json` in
+  the sandbox and removed afterward. Stored auth/cookie headers are redacted; no config path or
+  credentials are reported. No discovery or non-configured sweep.
 - **Local SSRF Level 1 is callback-proven.** A callback sidecar on the internal network logs a
   per-run nonce; `EXPOSED` only on a hit. `--confirm` is required, the callback has no egress,
   and live SSRF is deferred. A hit proves an internal fetch, not external egress.

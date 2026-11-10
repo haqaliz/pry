@@ -17,11 +17,11 @@ implemented (first slice + missing-auth declarations): CORS with credentials, ve
 leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
 credentials. P5 read-only signed proof bundles implemented for local and live read-only
 EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans and
-configured live IDOR checks are implemented for URLs with a P1 token. Local Level 1 SSRF and
-bounded local rate-limit observations are implemented with `--confirm`. IDOR discovery, local
-IDOR, exposed database rules, live write-based checks, live SSRF, live rate-limit probing,
-Level 2, and hosted/public reports are not started. A clean P3 result is `NOT_REPRODUCED`,
-never "secure."
+configured live IDOR checks are implemented for URLs with a P1 token; configured local IDOR
+runs in the sandbox. Local Level 1 SSRF and bounded local rate-limit observations are
+implemented with `--confirm`. IDOR discovery, exposed database rules, live write-based checks,
+live SSRF, live rate-limit probing, Level 2, and hosted/public reports are not started. A clean
+P3 result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -164,7 +164,24 @@ succeed; 401/403/404 is `NOT_REPRODUCED`; a failed control or 5xx is `UNVERIFIED
 request/response headers redact `Cookie`, `Authorization`, `Set-Cookie`, and API key values.
 The config path and credentials never appear in results, proofs, reports, or errors.
 
-No discovery and no local IDOR in this slice. A local path with `--idor-config` exits 2.
+No discovery in this slice; the config declares the object pair.
+
+## Local IDOR
+
+```bash
+chmod 600 idor.json
+pry scan ./my-app --idor-config idor.json
+```
+
+The same config shape as live IDOR, but the three GETs run inside the sandbox. Pry validates
+the 0600 config, writes a 0600 temp copy, mounts it read-only at `/pry-config/idor.json` in the
+probe sidecar, and removes it afterward. `EXPOSED` only when A→A and B→B controls succeed and
+A→B returns 2xx JSON. Stored request/response headers redact `Cookie`, `Authorization`,
+`Set-Cookie`, and API-key values; the config path, temp path, and credentials never appear in
+results, proofs, reports, logs, or errors.
+
+No discovery and no non-configured sweep. The result is about the declared object pair, not a
+global IDOR conclusion.
 
 ## Local SSRF (Level 1)
 
@@ -251,7 +268,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + configured IDOR; P4 Level 1 local SSRF + rate-limit observation
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local configured IDOR; P4 Level 1 local SSRF + rate-limit observation
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -295,8 +312,9 @@ pry scan ./my-app --endpoint /api/users --endpoint /api/admin
 # Scan a verified URL with the read-only probes
 pry scan https://example.com --token <token> --report
 
-# Configured live IDOR (config must be 0600)
+# Configured live or local IDOR (config must be 0600)
 pry scan https://example.com --token <token> --idor-config idor.json
+pry scan ./my-app --idor-config idor.json
 
 # Local Level 1 SSRF (requires explicit confirmation)
 pry scan ./my-app --level 1 --confirm \
@@ -336,8 +354,9 @@ Pry implements a strict ownership gate with:
 6. Every local or live read-only `EXPOSED` result is an Ed25519-signed bundle; `verify-proof`
    checks the signature and fingerprint.
 7. Live scans require a P1 token, are GET-only, send no credentials, and make 4–6 requests;
-   configured IDOR adds the credentials from a 0600 file to its three requests only. Stored
-   headers redact auth/cookie/API-key values.
+   configured live/local IDOR adds the credentials from a 0600 file to its three requests only.
+   The local config is mounted read-only into the sandbox and removed afterward. Stored headers
+   redact auth/cookie/API-key values.
 8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is
    the only EXPOSED condition. The rate-limit probe is a bounded local hardening observation,
    not a verdict. Live SSRF, live rate-limit, Level 2, and write-based checks are not

@@ -19,17 +19,18 @@ of an app: *does it actually hold, or does it give?*
 Status: **P1 ownership gate implemented; P2 local intake implemented; P3 read-only probes
 implemented (first slice + missing-auth declarations); P5 read-only signed proof bundles
 implemented for local and live read-only EXPOSED findings; P6 local findings report and corpus
-implemented; live read-only scans implemented; configured live IDOR implemented; local Level 1
-SSRF implemented; local rate-limit observation implemented; IDOR discovery, local IDOR, exposed
-database rules, live write-based checks, live SSRF, live rate-limit, Level 2, and hosted/public
-reports not started.** The gate lives in `src/pry/own/`; the sandbox in `src/pry/intake/`; the
-probes and live path in `src/pry/probe/`; the signed bundles in `src/pry/proof/`; the report in
+implemented; live read-only scans implemented; configured live IDOR implemented; local IDOR implemented; local Level 1
+SSRF implemented; local rate-limit observation implemented; IDOR discovery, exposed database
+rules, live write-based checks, live SSRF, live rate-limit, Level 2, and hosted/public reports
+not started.** The gate lives in `src/pry/own/`; the sandbox in `src/pry/intake/`; the probes
+and live path in `src/pry/probe/`; the signed bundles in `src/pry/proof/`; the report in
 `src/pry/report/`. A local `pry scan --endpoint /path` sends an unauthenticated GET to a
 declared-protected path; a URL scan with a P1 token runs the same probes and configured IDOR
-live and signs/reports the results. IDOR configs are 0600 and credentials are redacted. A local
-`--level 1 --confirm --ssrf-endpoint PATH --ssrf-parameter NAME` uses a callback sidecar; a
-local `--rate-limit-endpoint PATH` records a bounded hardening observation, not a verdict or
-proof. Both are local-only. Do not describe capability that isn't there yet.
+live and signs/reports the results. IDOR configs are 0600; the local config is mounted read-only
+and removed, and credentials are redacted. A local `--level 1 --confirm --ssrf-endpoint PATH
+--ssrf-parameter NAME` uses a callback sidecar; a local `--rate-limit-endpoint PATH` records a
+bounded hardening observation, not a verdict or proof. Both are local-only. Do not describe
+capability that isn't there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed

@@ -35,9 +35,9 @@ is offline; the manual owner-domain check remains.
 
 Phase 1 status (2026-11-08): M1.1 partial — CORS with credentials, verbose error leakage,
 exposed secret files, and declared-protected endpoints returning 200 JSON without credentials
-are implemented for local repos. Configured live IDOR is implemented (two identities, two
-objects, 0600 config). Endpoint discovery, IDOR discovery, local IDOR, exposed database rules,
-and header-only checks are not. M1.3 local and live read-only `pry scan` works; write/levels
+are implemented for local repos. Configured live and local IDOR are implemented (two
+identities, two objects, 0600 config; the local config is mounted read-only). Endpoint
+discovery, IDOR discovery, exposed database rules, and header-only checks are not. M1.3 local and live read-only `pry scan` works; write/levels
 1–2 remain. M1.2 is done for local and live read-only findings — every `EXPOSED` writes an
 Ed25519-signed bundle; live replay remains P5. M1.4 is not started.
 
