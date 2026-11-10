@@ -921,11 +921,7 @@ def main(argv=None, fetch=None, sleep=None) -> int:
         if len(args) != 2:
             sys.stderr.write(usage)
             return 2
-        print(
-            json.dumps(
-                probe_headers(args[1], fetch=fetch), sort_keys=True
-            )
-        )
+        print(json.dumps(probe_headers(args[1], fetch=fetch), sort_keys=True))
         return 0
     if args[0] == "idor":
         if len(args) != 3:

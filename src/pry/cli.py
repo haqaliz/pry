@@ -104,6 +104,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Declared-protected path to GET without credentials (repeatable)",
     )
     scan.add_argument(
+        "--headers",
+        action="store_true",
+        help=(
+            "Record the recommended response headers on / "
+            "(hardening observation, not a verdict)"
+        ),
+    )
+    scan.add_argument(
         "--idor-config",
         metavar="FILE",
         help="0600 JSON config with two identities and two object paths",
@@ -487,6 +495,8 @@ def _scan_target_path(args) -> int:
         "port": args.port,
         "endpoints": endpoints,
     }
+    if args.headers:
+        kwargs["headers"] = True
     if ssrf_config is not None:
         kwargs["ssrf_config"] = ssrf_config
     if rate_limit_config is not None:
@@ -539,14 +549,15 @@ def _scan_target_url(args) -> int:
         _print_error(exc, args.json)
         return 2
 
+    live_kwargs = {
+        "endpoints": endpoints,
+        "out": args.out,
+        "idor_config": idor_config,
+    }
+    if args.headers:
+        live_kwargs["headers"] = True
     try:
-        outcome = scan_live(
-            args.target,
-            token,
-            endpoints=endpoints,
-            out=args.out,
-            idor_config=idor_config,
-        )
+        outcome = scan_live(args.target, token, **live_kwargs)
     except (OwnershipError, IntakeError, ProbeError, ProofError) as exc:
         _print_error(exc, args.json)
         return 2

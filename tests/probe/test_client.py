@@ -472,3 +472,112 @@ def test_an_unknown_idor_verdict_is_unverified_with_a_cause():
     assert result.verdict == UNVERIFIED
     assert result.cause == UNKNOWN_VERDICT
     assert result.response is None
+
+
+def _headers_observation(status=OBSERVED):
+    return {
+        "probe": "headers",
+        "status": status,
+        "evidence": "6 recommended response headers checked on /: 1 present, "
+        "5 missing (hardening observation)",
+        "request": {
+            "method": "GET",
+            "url": BASE + "/",
+            "headers": {"User-Agent": "pry/0.1"},
+        },
+        "response": {
+            "status": 200,
+            "headers": {"X-Frame-Options": "DENY"},
+            "body": "ok",
+        },
+        "missing": ["content-security-policy"],
+        "present": ["x-frame-options"],
+    }
+
+
+def test_run_headers_execs_the_sidecar_and_parses_the_observation():
+    fake = FakeDocker([_json(_headers_observation())])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_headers()
+
+    assert fake.calls == [
+        (SIDECAR, ["python", "/pry/sidecar.py", "headers", BASE], 20)
+    ]
+    assert isinstance(result, dict)
+    assert not isinstance(result, ProbeResult)
+    assert result["probe"] == "headers"
+    assert result["status"] == OBSERVED
+    assert result["missing"] == ["content-security-policy"]
+    assert result["present"] == ["x-frame-options"]
+    assert "verdict" not in result
+    assert "proof" not in result
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        CommandResult(1, b"", b"sidecar exploded", False),
+        CommandResult(125, b"", b"", False),
+    ],
+)
+def test_a_headers_nonzero_exit_is_an_unverified_observation(command):
+    result = ProbeClient(FakeDocker([command]), SIDECAR, BASE).run_headers()
+
+    assert result["probe"] == "headers"
+    assert result["status"] == UNVERIFIED
+    assert result["missing"] == []
+    assert result["present"] == []
+    assert result["response"] is None
+    assert EXEC_FAILED in result["evidence"]
+
+
+def test_a_headers_timeout_is_an_unverified_observation():
+    fake = FakeDocker([CommandResult(-1, b"", b"", True)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_headers()
+
+    assert result["status"] == UNVERIFIED
+    assert EXEC_TIMEOUT in result["evidence"]
+    assert result["response"] is None
+
+
+@pytest.mark.parametrize("stdout", [b"not json", b""])
+def test_invalid_headers_json_is_an_unverified_observation(stdout):
+    fake = FakeDocker([CommandResult(0, stdout, b"", False)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_headers()
+
+    assert result["status"] == UNVERIFIED
+    assert INVALID_RESULT in result["evidence"]
+    assert result["response"] is None
+
+
+def test_non_object_headers_json_is_an_invalid_observation():
+    fake = FakeDocker([CommandResult(0, b"[1, 2]", b"", False)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_headers()
+
+    assert result["status"] == UNVERIFIED
+    assert "HEADERS_PROBE_INVALID" in result["evidence"]
+    assert result["response"] is None
+
+
+def test_a_headers_docker_exception_is_unverified_and_does_not_escape():
+    fake = FakeDocker([RuntimeError("docker exec exploded")])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_headers()
+
+    assert result["status"] == UNVERIFIED
+    assert EXEC_FAILED in result["evidence"]
+    assert "docker exec exploded" in result["evidence"]
+
+
+def test_a_headers_payload_that_tries_to_carry_a_verdict_is_unverified():
+    payload = dict(_headers_observation(), verdict=EXPOSED)
+    fake = FakeDocker([_json(payload)])
+
+    result = ProbeClient(fake, SIDECAR, BASE).run_headers()
+
+    assert result["status"] == UNVERIFIED
+    assert "HEADERS_PROBE_INVALID" in result["evidence"]
+    assert "verdict" not in result

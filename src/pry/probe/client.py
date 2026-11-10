@@ -3,6 +3,7 @@
 import json
 from typing import List
 
+from pry.probe.headers import HEADER_PROBE, parse_headers_result
 from pry.probe.rate_limit import (
     RATE_LIMIT,
     RateLimitConfig,
@@ -56,6 +57,22 @@ def _rate_limit_unverified(cause, evidence, base_url, path) -> dict:
         "response": None,
         "count": 0,
         "statuses": [],
+    }
+
+
+def _headers_unverified(cause, evidence, base_url) -> dict:
+    return {
+        "probe": HEADER_PROBE,
+        "status": UNVERIFIED,
+        "evidence": "headers probe failed: %s: %s" % (cause, evidence),
+        "request": {
+            "method": "GET",
+            "url": base_url.rstrip("/") + "/",
+            "headers": {},
+        },
+        "response": None,
+        "missing": [],
+        "present": [],
     }
 
 
@@ -202,3 +219,34 @@ class ProbeClient:
         return parse_rate_limit_result(
             payload, RateLimitConfig(endpoint=path, count=count)
         )
+
+    def run_headers(self) -> dict:
+        """Exec the sidecar header observation; a failure is UNVERIFIED, not a raise."""
+        command = ["python", SIDECAR_PATH, HEADER_PROBE, self.base_url]
+        try:
+            result = self.docker.exec(
+                self.sidecar, command, timeout=self.timeout
+            )
+        except Exception as exc:
+            return _headers_unverified(
+                EXEC_FAILED, "cannot exec sidecar: %s" % exc, self.base_url
+            )
+        if result.timed_out:
+            return _headers_unverified(
+                EXEC_TIMEOUT,
+                "probe timed out after %ss" % self.timeout,
+                self.base_url,
+            )
+        if result.returncode != 0:
+            return _headers_unverified(
+                EXEC_FAILED, _detail(result), self.base_url
+            )
+        try:
+            payload = json.loads(_text(result.stdout))
+        except ValueError:
+            return _headers_unverified(
+                INVALID_RESULT,
+                "sidecar did not print valid JSON",
+                self.base_url,
+            )
+        return parse_headers_result(payload)

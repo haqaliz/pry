@@ -21,6 +21,7 @@ from pry.probe.scan import (
 from pry.probe.sidecar import (
     probe_cors,
     probe_errors,
+    probe_headers,
     probe_secrets,
     probe_unauth,
 )
@@ -77,7 +78,9 @@ def _run_probes(origin, endpoints, idor_config=None):
     return results
 
 
-def scan_live(url, token, *, endpoints=None, out=None, idor_config=None):
+def scan_live(
+    url, token, *, endpoints=None, out=None, idor_config=None, headers=False
+):
     """Prove ownership of ``url``, run the read-only probes, finalize."""
     target = normalize_target(url)
     proof = TokenSigner().validate(token, target)
@@ -92,8 +95,9 @@ def scan_live(url, token, *, endpoints=None, out=None, idor_config=None):
     write_snapshot(run_dir, snapshot)
 
     results = _run_probes(target.origin, endpoints, idor_config)
+    observations = [probe_headers(target.origin)] if headers else []
     results, summary, results_path, corpus_error = finalize_results(
-        run_dir, snapshot, results
+        run_dir, snapshot, results, observations
     )
     return ScanOutcome(
         snapshot=snapshot,
@@ -101,4 +105,5 @@ def scan_live(url, token, *, endpoints=None, out=None, idor_config=None):
         results_path=results_path,
         summary=summary,
         corpus_error=corpus_error,
+        observations=observations,
     )

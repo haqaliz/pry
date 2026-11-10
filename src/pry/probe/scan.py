@@ -291,6 +291,7 @@ def scan_local(
     port=None,
     docker=None,
     endpoints=None,
+    headers=False,
     ssrf_config=None,
     rate_limit_config=None,
     idor_config=None,
@@ -320,6 +321,8 @@ def scan_local(
                 )
             client = ProbeClient(runner, sidecar, app_base)
             results.extend(client.run_all())
+            if headers:
+                observations.append(client.run_headers())
             for endpoint in endpoints:
                 results.append(client.run("unauth", endpoint=endpoint))
             if ssrf_config is not None:
