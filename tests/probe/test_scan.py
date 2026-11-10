@@ -564,6 +564,42 @@ def test_scan_without_declared_endpoints_runs_exactly_the_floor_probes(
     ]
 
 
+def test_scan_signs_an_exposed_database_result(repo, tmp_path, monkeypatch):
+    docker = FakeDocker(
+        responses={"database": _payload("database", EXPOSED)}
+    )
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(repo, out=tmp_path / "run", docker=docker)
+
+    database = [
+        result for result in outcome.results if result.probe == "database"
+    ]
+    assert len(database) == 1
+    assert database[0].verdict == EXPOSED
+    assert database[0].proof is not None
+    payload, _fingerprint = verify_bundle(load_bundle(database[0].proof))
+    assert payload["finding"]["probe"] == "database"
+    assert payload["finding"]["verdict"] == EXPOSED
+    assert outcome.summary[EXPOSED] == 1
+
+
+def test_scan_reports_a_database_result_without_a_signature(
+    repo, tmp_path, monkeypatch
+):
+    docker = FakeDocker()
+    monkeypatch.setattr(scan, "intake", FakeIntake(_snapshot()))
+
+    outcome = scan.scan_local(repo, out=tmp_path / "run", docker=docker)
+
+    database = [
+        result for result in outcome.results if result.probe == "database"
+    ]
+    assert len(database) == 1
+    assert database[0].verdict == NOT_REPRODUCED
+    assert database[0].proof is None
+
+
 @pytest.mark.parametrize(
     "bad",
     [

@@ -28,7 +28,7 @@ from pry.report.corpus import read_findings
 
 ORIGIN = "https://app.example.com"
 OTHER = "https://other.example"
-PROBES = ("cors", "errors", "secrets")
+PROBES = ("cors", "errors", "secrets", "database")
 
 
 @pytest.fixture(autouse=True)
@@ -96,6 +96,7 @@ def sentinel(monkeypatch):
         "probe_cors",
         "probe_errors",
         "probe_secrets",
+        "probe_database",
         "probe_unauth",
         "probe_idor",
     ):
@@ -119,6 +120,10 @@ def fake_probes(monkeypatch):
         calls.append(("secrets", base_url))
         return _payload("secrets", UNVERIFIED, base_url + "/.env")
 
+    def database(base_url):
+        calls.append(("database", base_url))
+        return _payload("database", NOT_REPRODUCED, base_url + "/data.db")
+
     def unauth(base_url, path):
         calls.append(("unauth", base_url, path))
         return _payload("unauth", EXPOSED, base_url + path)
@@ -126,6 +131,7 @@ def fake_probes(monkeypatch):
     monkeypatch.setattr(live, "probe_cors", cors)
     monkeypatch.setattr(live, "probe_errors", errors)
     monkeypatch.setattr(live, "probe_secrets", secrets)
+    monkeypatch.setattr(live, "probe_database", database)
     monkeypatch.setattr(live, "probe_unauth", unauth)
     return calls
 
@@ -181,6 +187,7 @@ def test_scan_live_runs_the_shared_probes_and_signs_exposed_findings(
         ("cors", ORIGIN),
         ("errors", ORIGIN),
         ("secrets", ORIGIN),
+        ("database", ORIGIN),
     ]
     assert [result.probe for result in outcome.results] == list(PROBES)
     assert all(isinstance(result, ProbeResult) for result in outcome.results)
@@ -188,9 +195,10 @@ def test_scan_live_runs_the_shared_probes_and_signs_exposed_findings(
         EXPOSED,
         NOT_REPRODUCED,
         UNVERIFIED,
+        NOT_REPRODUCED,
     ]
     assert outcome.summary == summarize(outcome.results)
-    assert outcome.summary == {EXPOSED: 1, NOT_REPRODUCED: 1, UNVERIFIED: 1}
+    assert outcome.summary == {EXPOSED: 1, NOT_REPRODUCED: 2, UNVERIFIED: 1}
     assert outcome.results_path == run_dir / "results.json"
     assert outcome.snapshot == json.loads(
         (run_dir / "snapshot.json").read_text(encoding="utf-8")
@@ -224,6 +232,45 @@ def test_scan_live_runs_the_shared_probes_and_signs_exposed_findings(
     }
     assert [entry["probe"] for entry in data["results"]] == list(PROBES)
     assert data["summary"] == outcome.summary
+
+
+def test_scan_live_signs_an_exposed_database_result(
+    tmp_path, fake_probes, monkeypatch
+):
+    monkeypatch.setattr(
+        live,
+        "probe_database",
+        lambda base_url: _payload(
+            "database", EXPOSED, base_url + "/dump.sql"
+        ),
+    )
+
+    outcome = live.scan_live(ORIGIN, _token(), out=tmp_path / "run")
+
+    database = next(
+        result for result in outcome.results if result.probe == "database"
+    )
+    assert database.verdict == EXPOSED
+    assert database.proof is not None
+    payload, _fingerprint = verify_bundle(load_bundle(database.proof))
+    assert payload["finding"]["probe"] == "database"
+    assert payload["finding"]["verdict"] == EXPOSED
+
+    data = json.loads(outcome.results_path.read_text(encoding="utf-8"))
+    assert [entry["probe"] for entry in data["results"]].count("database") == 1
+
+
+def test_scan_live_records_a_database_result_without_a_signature(
+    tmp_path, fake_probes
+):
+    outcome = live.scan_live(ORIGIN, _token(), out=tmp_path / "run")
+
+    database = [
+        result for result in outcome.results if result.probe == "database"
+    ]
+    assert len(database) == 1
+    assert database[0].verdict == NOT_REPRODUCED
+    assert database[0].proof is None
 
 
 def test_scan_live_writes_a_live_snapshot(tmp_path, fake_probes):
@@ -279,6 +326,7 @@ def test_scan_live_runs_unauth_for_each_declared_endpoint(tmp_path, fake_probes)
         ("cors", ORIGIN),
         ("errors", ORIGIN),
         ("secrets", ORIGIN),
+        ("database", ORIGIN),
         ("unauth", ORIGIN, "/api/users"),
         ("unauth", ORIGIN, "/api/admin"),
     ]
@@ -286,10 +334,11 @@ def test_scan_live_runs_unauth_for_each_declared_endpoint(tmp_path, fake_probes)
         "cors",
         "errors",
         "secrets",
+        "database",
         "unauth",
         "unauth",
     ]
-    assert outcome.summary == {EXPOSED: 3, NOT_REPRODUCED: 1, UNVERIFIED: 1}
+    assert outcome.summary == {EXPOSED: 3, NOT_REPRODUCED: 2, UNVERIFIED: 1}
 
 
 def test_scan_live_appends_the_configured_idor_result(
@@ -318,6 +367,7 @@ def test_scan_live_appends_the_configured_idor_result(
         "cors",
         "errors",
         "secrets",
+        "database",
         "unauth",
         "idor",
     ]
@@ -395,6 +445,7 @@ def test_scan_live_appends_one_corpus_record_per_finding(
         EXPOSED,
         NOT_REPRODUCED,
         UNVERIFIED,
+        NOT_REPRODUCED,
     ]
     assert all(record["kind"] == "live" for record in records)
     assert all(record["target"] == ORIGIN for record in records)

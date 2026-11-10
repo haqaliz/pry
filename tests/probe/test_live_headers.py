@@ -60,6 +60,7 @@ def fake_probes(monkeypatch):
     monkeypatch.setattr(live, "probe_cors", probe("cors"))
     monkeypatch.setattr(live, "probe_errors", probe("errors"))
     monkeypatch.setattr(live, "probe_secrets", probe("secrets"))
+    monkeypatch.setattr(live, "probe_database", probe("database"))
     return calls
 
 
@@ -115,11 +116,13 @@ def test_scan_live_with_headers_appends_the_in_process_observation(
         ("cors", ORIGIN),
         ("errors", ORIGIN),
         ("secrets", ORIGIN),
+        ("database", ORIGIN),
     ]
     assert [result.probe for result in outcome.results] == [
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert [observation["probe"] for observation in outcome.observations] == [
         "headers"
@@ -132,7 +135,7 @@ def test_scan_live_with_headers_appends_the_in_process_observation(
     assert "verdict" not in observation
     assert outcome.summary == {
         EXPOSED: 0,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
 

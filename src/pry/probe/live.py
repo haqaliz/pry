@@ -20,6 +20,7 @@ from pry.probe.scan import (
 )
 from pry.probe.sidecar import (
     probe_cors,
+    probe_database,
     probe_errors,
     probe_headers,
     probe_secrets,
@@ -69,6 +70,7 @@ def _run_probes(origin, endpoints, idor_config=None):
         ProbeResult(**probe_cors(origin)),
         ProbeResult(**probe_errors(origin)),
         ProbeResult(**probe_secrets(origin)),
+        ProbeResult(**probe_database(origin)),
     ]
     results.extend(
         ProbeResult(**probe_unauth(origin, path)) for path in endpoints
