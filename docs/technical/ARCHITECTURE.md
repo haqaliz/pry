@@ -4,9 +4,10 @@ Design intent, not built behavior. P1 is implemented; P2 local intake is impleme
 read-only probes are implemented; P5 read-only signed bundles are implemented for local and
 live read-only findings; P6 local report/corpus are implemented; live read-only scans and
 configured live IDOR and configured local IDOR are implemented; local Level 1 SSRF and a
-bounded local rate-limit observation are implemented; opt-in response header observations are
-implemented for local and live scans; live write-based checks, live SSRF, live rate-limit,
-Level 2, general authenticated scanning, hosted reports, and the rest of P5 are design intent.
+bounded local rate-limit observation are implemented; opt-in response header observations and
+served database file checks are implemented for local and live scans; live write-based checks,
+live SSRF, live rate-limit, provider database/open-rule checks, Level 2, general authenticated
+scanning, hosted reports, and the rest of P5 are design intent.
 
 ## Pipeline
 
@@ -37,7 +38,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + rate-limit observation
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + rate-limit observation
   proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
   cli/        pry scan | verify-ownership | intake | verify-proof | report
@@ -53,10 +54,15 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
   pins what ran.
 - **Local probes run from a sidecar on an internal network.** The app and the sidecar share a
   per-run Docker `--internal` network; the host runs the probes through `docker exec`. Neither
-  container has egress. Secrets are redacted inside the sidecar before the host sees them.
+  container has egress. Secrets and database rows are redacted inside the sidecar before the
+  host sees them.
 - **Live read-only scans run from the host after P1.** No sandbox; the token authorizes the
-  origin. GET-only, no credentials, 4–6 requests. The same probe functions and proof/report
-  path are used, so local and live cannot drift.
+  origin. GET-only, no credentials, up to 12 requests. The same probe functions and
+  proof/report path are used, so local and live cannot drift.
+- **Served database files are signature-proven.** Four fixed paths get one GET each. A
+  same-origin 2xx SQLite header or SQL-dump signature is `EXPOSED`; the stored body is a short
+  signature excerpt, never rows. Provider database/open-rule checks (Firebase, Supabase) are
+  deferred because P1 cannot prove ownership of a third-party database host.
 - **Configured live IDOR and local IDOR are credential-safe.** Two identities, two object
   paths, three GETs; the 0600 config is read once. Both controls must pass before the cross
   request can be EXPOSED. The local config is mounted read-only at `/pry-config/idor.json` in

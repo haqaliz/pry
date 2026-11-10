@@ -172,7 +172,7 @@ def test_readme_live_readonly_is_honest():
     assert "Live Read-Only Scans" in text
     assert "P1 token" in text
     assert "GET-only" in text
-    assert "4–6" in text
+    assert "up to 12 requests" in text
 
 
 def test_claude_live_status():
@@ -304,3 +304,27 @@ def test_capability_roadmap_header_observation_status():
 def test_architecture_header_observation_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
     assert "response headers are an observation" in text
+
+
+def test_readme_database_files_are_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Exposed Database Files" in text
+    assert "/data.db" in text
+    assert "signature excerpt" in text
+    assert "rows are never kept" in text
+    assert "Provider rule checks" in text
+
+
+def test_claude_database_file_status():
+    text = " ".join(_read("CLAUDE.md").split()).lower()
+    assert "exposed database file checks implemented" in text
+
+
+def test_capability_roadmap_database_file_status():
+    text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split()).lower()
+    assert "served database file checks" in text
+
+
+def test_architecture_database_file_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
+    assert "served database files are signature-proven" in text

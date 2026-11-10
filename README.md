@@ -14,15 +14,15 @@ the data it should not have returned.
 
 P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor probes
 implemented (first slice + missing-auth declarations): CORS with credentials, verbose error
-leakage, exposed secret files, and declared-protected endpoints that return 200 JSON with no
-credentials. P5 read-only signed proof bundles implemented for local and live read-only
-EXPOSED findings. P6 local findings report and corpus implemented. Live read-only scans and
-configured live IDOR checks are implemented for URLs with a P1 token; configured local IDOR
-runs in the sandbox. Local Level 1 SSRF and bounded local rate-limit observations are
-implemented with `--confirm`. Opt-in response header observations are implemented for local and
-live scans. IDOR discovery, exposed database rules, live write-based checks, live SSRF, live
-rate-limit probing, Level 2, and hosted/public reports are not started. A clean P3 result is
-`NOT_REPRODUCED`, never "secure."
+leakage, exposed secret files, served database files, and declared-protected endpoints that
+return 200 JSON with no credentials. P5 read-only signed proof bundles implemented for local
+and live read-only EXPOSED findings. P6 local findings report and corpus implemented. Live
+read-only scans and configured live IDOR checks are implemented for URLs with a P1 token;
+configured local IDOR runs in the sandbox. Local Level 1 SSRF and bounded local rate-limit
+observations are implemented with `--confirm`. Opt-in response header observations are
+implemented for local and live scans. IDOR discovery, provider database/open-rule checks, live
+write-based checks, live SSRF, live rate-limit probing, Level 2, and hosted/public reports are
+not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -93,7 +93,7 @@ writes `results.json` beside the snapshot, and cleans up. A local path needs no 
 token: the user already has the files. A URL requires the P1 token and runs the same read-only
 probes against the live origin.
 
-The first slice checks five classes:
+The first slice checks six classes:
 
 1. **CORS with credentials** — the response reflects `https://pry.invalid` and sets
    `Access-Control-Allow-Credentials: true`. `*` plus credentials is not reported as EXPOSED.
@@ -101,18 +101,20 @@ The first slice checks five classes:
    debug page, or SQL error.
 3. **Exposed secret files** — a fixed sensitive path returns a file containing a secret.
    Values are redacted before they leave the sidecar.
-4. **Unauthenticated endpoints** — declare protected paths with `--endpoint`; a 200 JSON
+4. **Exposed database files** — a fixed path returns a SQLite header or a SQL dump at the
+   start of the body. The stored body is a signature excerpt only; rows are never kept.
+5. **Unauthenticated endpoints** — declare protected paths with `--endpoint`; a 200 JSON
    response with no `Authorization` or `Cookie` header is EXPOSED. 401/403/404, a redirect, a
    2xx HTML login page, or an empty body is NOT_REPRODUCED.
-5. **Configured IDOR** — with `--idor-config`, two identities and two object paths; A→B
+6. **Configured IDOR** — with `--idor-config`, two identities and two object paths; A→B
    200 JSON while both controls succeed is EXPOSED. Live and local; the config is 0600 and
    credentials are redacted.
 
 The endpoint list is your declaration: Pry does not discover routes or infer auth from code.
 The result is "this declared-protected path returned data with no credentials," not "the app
-has no authentication." Endpoint discovery, IDOR discovery, exposed database rules, and header
-policy analysis are deferred. See [`ETHICS.md`](ETHICS.md) for what an
-exposure does and does not assert.
+has no authentication." Endpoint discovery, IDOR discovery, provider database/open-rule
+checks (Firebase, Supabase), and header policy analysis are deferred. See
+[`ETHICS.md`](ETHICS.md) for what an exposure does and does not assert.
 
 ```bash
 pry scan ./my-app
@@ -124,15 +126,31 @@ The app and the probe sidecar share a per-run Docker internal network with no eg
 host runs probes through `docker exec` into the sidecar; no host port is published. Exit
 codes: 0 for no EXPOSED, 1 for any EXPOSED, 2 for usage/sandbox errors.
 
+## Exposed Database Files
+
+Every level 0 scan GETs `/data.db`, `/app.db`, `/db.sqlite`, and `/dump.sql` with no
+credentials and no redirects. A same-origin 2xx response whose body starts with the SQLite
+header (`SQLite format 3`) or with SQL-dump statements (`CREATE TABLE`, `INSERT INTO`,
+`PRAGMA`, `BEGIN TRANSACTION`, `DROP TABLE`) is `EXPOSED` and signed.
+
+The stored response body is a short signature excerpt, not the dump: rows and binary content
+are withheld. 401/403/404, an HTML fallback, or no signature is `NOT_REPRODUCED`; a transport
+failure is `UNVERIFIED`.
+
+These are four conventional paths, not a database sweep. Provider rule checks (Firebase,
+Supabase) are deferred: Pry cannot prove ownership of a third-party database host with the
+current P1 methods.
+
 ## Live Read-Only Scans
 
 `pry scan https://example.com --token <token>` validates the P1 token for the target origin,
-then runs the same four read-only probes from the host. There is no Docker sandbox for a live
+then runs the same read-only probes from the host. There is no Docker sandbox for a live
 target; the token is the authorization.
 
-- GET-only; no `Authorization`/`Cookie`; no writes; 4–6 requests, plus one for `--headers`.
-- CORS, verbose errors, exposed secret files, and declared `--endpoint` paths; same verdict
-  rules as a local scan.
+- GET-only; no `Authorization`/`Cookie`; no writes; up to 12 requests, plus one for
+  `--headers`, one per `--endpoint`, and three for configured IDOR.
+- CORS, verbose errors, exposed secret files, served database files, and declared
+  `--endpoint` paths; same verdict rules as a local scan.
 - Results are signed and reportable with `--report`; `--headers` adds an unsigned observation.
 - A missing, invalid, or wrong-target token exits 2 before any request.
 - Rate-limit probing, SSRF, write-based checks, and levels 1–2 are not implemented.
@@ -287,7 +305,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + header observations; P4 Level 1 local SSRF + rate-limit observation
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -372,11 +390,12 @@ Pry implements a strict ownership gate with:
    during the run phase, a non-root user, a read-only root, dropped capabilities, resource
    limits, and guaranteed cleanup.
 5. P3 local scans run read-only probes in an internal network with no egress; the sidecar
-   redacts secret values before the host sees them.
+   redacts secret values and database rows before the host sees them.
 6. Every local or live read-only `EXPOSED` result is an Ed25519-signed bundle; `verify-proof`
    checks the signature and fingerprint.
-7. Live scans require a P1 token, are GET-only, send no credentials, and make 4–6 requests;
-   configured live/local IDOR adds the credentials from a 0600 file to its three requests only.
+7. Live scans require a P1 token, are GET-only, send no credentials, and make up to 12
+   requests; configured live/local IDOR adds the credentials from a 0600 file to its three
+   requests only.
    The local config is mounted read-only into the sandbox and removed afterward. Stored headers
    redact auth/cookie/API-key values.
 8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is

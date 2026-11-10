@@ -46,6 +46,9 @@
 - The opt-in header observation is one GET to `/` on a local or live scan. Missing or present
   recommended headers are a hardening observation, not a verdict or proof. A CDN or proxy may
   set them, so the result quotes the response and claims nothing global.
+- The served-database check is four fixed GETs for conventional database paths. A SQLite
+  header or SQL-dump signature is `EXPOSED`, but only a short signature excerpt is stored;
+  rows and binary content are never kept. A clean result says nothing about other paths.
 - Level 2 is write-based confirmation. It runs only against a sandbox or staging copy by
   default. Against a live target it needs an additional explicit confirmation beyond the
   standard warning.
@@ -55,7 +58,8 @@
 ## Live read-only scans
 
 - Require a P1 token for the target origin; validate it before any request.
-- GET only; no `Authorization`/`Cookie`; no writes; 4–6 requests, plus one for `--headers`.
+- GET only; no `Authorization`/`Cookie`; no writes; up to 12 requests, plus one for
+  `--headers`, one per `--endpoint`, and three for configured IDOR.
 - Not a load test: live SSRF, live rate-limit probing, Level 2, and write-based checks are not
   implemented. Local Level 1 SSRF and the bounded local rate-limit observation are separate and
   require `--confirm`.
