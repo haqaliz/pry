@@ -1,6 +1,8 @@
 # PRD — Exposed Database Files (P3 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Served database file checks implemented;
+  IDOR discovery, provider database/open-rule checks, live SSRF, Level 2, and hosted reports
+  are deferred.
 - **Owner:** aliz
 - **Slug:** `database-files`
 - **Capability:** P3 remainder — exposed database files
