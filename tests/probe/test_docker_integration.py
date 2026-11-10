@@ -32,7 +32,7 @@ def proof_key(tmp_path, monkeypatch):
     monkeypatch.setenv("PRY_PROOF_KEY", str(tmp_path / "proof.key"))
 
 
-def test_vulnerable_fixture_reports_three_exposed(tmp_path):
+def test_vulnerable_fixture_reports_four_exposed(tmp_path):
     fixture = FIXTURES / "vulnerable-app"
     before = tree_sha256(fixture)
 
@@ -43,8 +43,9 @@ def test_vulnerable_fixture_reports_three_exposed(tmp_path):
         "cors": EXPOSED,
         "errors": EXPOSED,
         "secrets": EXPOSED,
+        "database": EXPOSED,
     }
-    assert outcome.summary[EXPOSED] == 3
+    assert outcome.summary[EXPOSED] == 4
 
     body = (tmp_path / "run" / "results.json").read_text(encoding="utf-8")
     assert "supersecretvalue123" not in body
@@ -57,7 +58,7 @@ def test_safe_fixture_reports_no_exposed(tmp_path):
         str(FIXTURES / "safe-app"), out=tmp_path / "run", timeout=60
     )
 
-    assert [result.verdict for result in outcome.results] == [NOT_REPRODUCED] * 3
+    assert [result.verdict for result in outcome.results] == [NOT_REPRODUCED] * 4
     assert outcome.summary[EXPOSED] == 0
 
 
@@ -110,7 +111,7 @@ def test_vulnerable_scan_writes_verifiable_bundles(tmp_path):
     )
 
     exposed = [result for result in outcome.results if result.verdict == EXPOSED]
-    assert len(exposed) == 4
+    assert len(exposed) == 5
     for result in exposed:
         assert result.proof is not None
         path = Path(result.proof)

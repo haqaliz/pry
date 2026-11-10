@@ -31,7 +31,7 @@ def isolated_state(tmp_path, monkeypatch):
     monkeypatch.setenv("PRY_CORPUS", str(tmp_path / "corpus.jsonl"))
 
 
-def test_vulnerable_report_has_four_verified_findings(tmp_path):
+def test_vulnerable_report_has_five_verified_findings(tmp_path):
     outcome = scan_local(
         str(FIXTURES / "vulnerable-app"),
         out=tmp_path / "run",
@@ -41,7 +41,7 @@ def test_vulnerable_report_has_four_verified_findings(tmp_path):
     report_path = write_report(tmp_path / "run")
 
     report = load_run(tmp_path / "run")
-    assert report.counts[EXPOSED] == 4
+    assert report.counts[EXPOSED] == 5
     assert all(
         finding.proof_status == "VALID"
         for finding in report.findings

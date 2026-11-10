@@ -82,6 +82,16 @@ http
       return;
     }
 
+    if (req.url === "/dump.sql") {
+      res.writeHead(200, { "Content-Type": "application/sql" });
+      res.end(
+        "-- pry fixture dump\n" +
+          "CREATE TABLE users (id INTEGER, email TEXT);\n" +
+          "INSERT INTO users VALUES (1, 'fixture-row@example.invalid');\n"
+      );
+      return;
+    }
+
     if (req.url === "/.env") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end(
