@@ -41,8 +41,10 @@
 - Level 1 is expanded read-only work and requires explicit per-target confirmation.
 - Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress. A callback hit
   proves the app fetched an internal URL, not arbitrary external egress. No live SSRF.
-- The local rate-limit observation is a bounded sample (1–20 GETs) and a hardening observation,
-  not a verdict. It does not run against a live target; a missing limit is not `EXPOSED`.
+- The rate-limit observation is a bounded sample and a hardening observation, not a verdict.
+  Local: 1–20 GETs. Live: max 5 GETs, 0.5s apart, level 1 + `--confirm`, stop on the first
+  429/503/`Retry-After`. A missing limit is not `EXPOSED`. Live sampling can still cause load
+  or a lockout; do not point it at login or account-recovery paths on a shared target.
 - The opt-in header observation is one GET to `/` on a local or live scan. Missing or present
   recommended headers are a hardening observation, not a verdict or proof. A CDN or proxy may
   set them, so the result quotes the response and claims nothing global.
@@ -59,10 +61,12 @@
 
 - Require a P1 token for the target origin; validate it before any request.
 - GET only; no `Authorization`/`Cookie`; no writes; up to 12 requests, plus one for
-  `--headers`, one per `--endpoint`, and three for configured IDOR.
-- Not a load test: live SSRF, live rate-limit probing, Level 2, and write-based checks are not
-  implemented. Local Level 1 SSRF and the bounded local rate-limit observation are separate and
-  require `--confirm`.
+  `--headers`, one per `--endpoint`, three for configured IDOR, and up to five for a live
+  rate-limit observation.
+- Not a load test: live SSRF, Level 2, and write-based checks are not implemented. Local Level
+  1 SSRF and the bounded local/live rate-limit observations are separate and require
+  `--confirm`; the live rate-limit sample is capped at five GETs and stops on the first
+  throttle.
 - The P1 token is the owner's authorization. If the target is shared or production, the owner
   must confirm they control it.
 - Configured live and local IDOR credentials come from a 0600 file, are used only for the three

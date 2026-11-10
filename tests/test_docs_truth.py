@@ -239,15 +239,18 @@ def test_architecture_ssrf_status():
 
 def test_readme_rate_limit_is_honest():
     text = " ".join(_read("README.md").split())
-    assert "Rate-Limit Observation (Level 1)" in text
+    assert "Rate-Limit Observation (Level 1, local and live)" in text
     assert "--rate-limit-endpoint" in text
     assert "not a verdict" in text
     assert "OBSERVED" in text
+    assert "Live: 1–5 GETs, 0.5s apart" in text
+    assert "stop on the first 429/503" in text
 
 
 def test_claude_rate_limit_status():
     text = " ".join(_read("CLAUDE.md").split()).lower()
-    assert "local rate-limit observation" in text
+    assert "live rate-limit" in text
+    assert "capped at five gets" in text
 
 
 def test_capability_roadmap_rate_limit_status():

@@ -20,10 +20,10 @@ Status: **P1 ownership gate implemented; P2 local intake implemented; P3 read-on
 implemented (first slice + missing-auth declarations); P5 read-only signed proof bundles
 implemented for local and live read-only EXPOSED findings; P6 local findings report and corpus
 implemented; live read-only scans implemented; configured live IDOR implemented; local IDOR
-implemented; local Level 1 SSRF implemented; local rate-limit observation implemented; opt-in
-response header observations implemented; exposed database file checks implemented; IDOR
-discovery, provider database/open-rule checks, live write-based checks, live SSRF, live
-rate-limit, Level 2, and hosted/public reports not started.** The gate lives in
+implemented; local Level 1 SSRF implemented; local and live rate-limit observations
+implemented; opt-in response header observations implemented; exposed database file checks
+implemented; IDOR discovery, provider database/open-rule checks, live write-based checks,
+live SSRF, Level 2, and hosted/public reports not started.** The gate lives in
 `src/pry/own/`; the sandbox in `src/pry/intake/`; the probes and live path in
 `src/pry/probe/`; the signed bundles in `src/pry/proof/`; the report in `src/pry/report/`. A
 local `pry scan --endpoint /path` sends an unauthenticated GET to a declared-protected path; a
@@ -33,9 +33,11 @@ credentials are redacted. Every scan GETs four fixed database paths; a SQLite he
 dump is `EXPOSED`, and only a signature excerpt is stored, never rows. A local `--level 1
 --confirm --ssrf-endpoint PATH --ssrf-parameter NAME` uses a callback sidecar; a local
 `--rate-limit-endpoint PATH` records a bounded hardening observation, not a verdict or proof.
-An opt-in `--headers` check makes one GET to `/` on a local or live scan and reports
-missing/present recommended headers as an unsigned hardening observation, never `EXPOSED`. The
-SSRF and rate-limit checks are local-only. Do not describe capability that isn't there yet.
+The live rate-limit sample is opt-in at level 1 with `--confirm`, capped at five GETs, spaced
+0.5s, and stops on the first throttle. An opt-in `--headers` check makes one GET to `/` on a
+local or live scan and reports missing/present recommended headers as an unsigned hardening
+observation, never `EXPOSED`. SSRF is local-only. Do not describe capability that isn't
+there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed
@@ -95,7 +97,8 @@ No "SAFE" or "SECURE" verdict exists. A heuristic may prioritize; a reproduced e
 
 - **Level 0 (default):** read-only, floor checks only (missing auth, broken access control,
   exposed secrets, exposed database files/open rules, verbose errors, missing headers/open CORS).
-- **Level 1:** read-only, expanded checks (non-mutating SSRF probes, rate-limit probing).
+- **Level 1:** read-only, expanded checks (non-mutating local SSRF probes, bounded
+  local/live rate-limit observations).
 - **Level 2:** write-based confirmation, sandbox/staging target only by default; against a live
   target requires an additional explicit confirmation step beyond the standard warning.
 

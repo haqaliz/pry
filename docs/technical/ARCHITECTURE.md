@@ -4,10 +4,11 @@ Design intent, not built behavior. P1 is implemented; P2 local intake is impleme
 read-only probes are implemented; P5 read-only signed bundles are implemented for local and
 live read-only findings; P6 local report/corpus are implemented; live read-only scans and
 configured live IDOR and configured local IDOR are implemented; local Level 1 SSRF and a
-bounded local rate-limit observation are implemented; opt-in response header observations and
-served database file checks are implemented for local and live scans; live write-based checks,
-live SSRF, live rate-limit, provider database/open-rule checks, Level 2, general authenticated
-scanning, hosted reports, and the rest of P5 are design intent.
+bounded local rate-limit observation and a bounded live rate-limit observation are
+implemented; opt-in response header observations and served database file checks are
+implemented for local and live scans; live write-based checks, live SSRF, provider
+database/open-rule checks, Level 2, general authenticated scanning, hosted reports, and the
+rest of P5 are design intent.
 
 ## Pipeline
 
@@ -38,7 +39,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + rate-limit observation
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + local/live rate-limit observation
   proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
   cli/        pry scan | verify-ownership | intake | verify-proof | report
@@ -57,8 +58,10 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
   container has egress. Secrets and database rows are redacted inside the sidecar before the
   host sees them.
 - **Live read-only scans run from the host after P1.** No sandbox; the token authorizes the
-  origin. GET-only, no credentials, up to 12 requests. The same probe functions and
-  proof/report path are used, so local and live cannot drift.
+  origin. GET-only, no credentials, up to 12 requests, plus one for headers, one per
+  declared endpoint, three for configured IDOR, and up to five for a live rate-limit
+  observation. The same probe functions and proof/report path are used, so local and live
+  cannot drift.
 - **Served database files are signature-proven.** Four fixed paths get one GET each. A
   same-origin 2xx SQLite header or SQL-dump signature is `EXPOSED`; the stored body is a short
   signature excerpt, never rows. Provider database/open-rule checks (Firebase, Supabase) are
@@ -71,9 +74,10 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Local SSRF Level 1 is callback-proven.** A callback sidecar on the internal network logs a
   per-run nonce; `EXPOSED` only on a hit. `--confirm` is required, the callback has no egress,
   and live SSRF is deferred. A hit proves an internal fetch, not external egress.
-- **Rate-limit is an observation, not a verdict.** A bounded local sample reports
+- **Rate-limit is an observation, not a verdict.** A bounded sample reports
   `OBSERVED`/`THROTTLED`/`UNVERIFIED` in a separate, unsigned section. It never becomes
-  `EXPOSED`; live rate-limit is deferred because of load/lockout risk.
+  `EXPOSED`. Live sampling requires level 1 + `--confirm`, is capped at five GETs, spaced
+  0.5s, and stops on the first 429/503/`Retry-After` to limit load and lockout risk.
 - **Response headers are an observation, not a verdict.** An opt-in `--headers` check makes one
   GET to `/` and reports missing/present recommended headers in the same unsigned section. It
   never becomes `EXPOSED` and is not signed; a CDN or proxy may set the headers.
