@@ -350,6 +350,38 @@ def test_render_html_shows_observations_and_escapes_them(tmp_path):
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
 
 
+def test_render_html_shows_header_missing_and_present_safely(tmp_path):
+    run_dir = _write_run(tmp_path, [_entry("cors", NOT_REPRODUCED)])
+    data = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
+    data["observations"] = [
+        {
+            "probe": "headers",
+            "status": "OBSERVED",
+            "evidence": "missing recommended headers",
+            "request": {
+                "method": "GET",
+                "url": "http://app:8000/",
+                "headers": {},
+            },
+            "response": {"status": 200, "headers": {}, "body": "ok"},
+            "missing": ["content-security-policy", "<script>evil</script>"],
+            "present": ["x-content-type-options"],
+        }
+    ]
+    (run_dir / "results.json").write_text(
+        json.dumps(data), encoding="utf-8"
+    )
+
+    html = render_html(load_run(run_dir))
+
+    assert "Missing:" in html
+    assert "content-security-policy" in html
+    assert "Present:" in html
+    assert "x-content-type-options" in html
+    assert "<script" not in html.lower()
+    assert "&lt;script&gt;evil&lt;/script&gt;" in html
+
+
 def test_render_html_escapes_scripts_in_evidence_body_and_headers(tmp_path):
     payload = "<script>alert(1)</script>"
     entry = _entry(

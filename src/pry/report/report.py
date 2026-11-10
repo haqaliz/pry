@@ -285,13 +285,27 @@ def _observation_html(observation) -> str:
         "signed and does not count as EXPOSED.</p>",
         "<h3>Evidence</h3><pre>%s</pre>"
         % _esc(observation.get("evidence", "")),
+    ]
+    missing = observation.get("missing")
+    if isinstance(missing, list):
+        parts.append(
+            "<p><strong>Missing:</strong> %s</p>"
+            % _esc(", ".join(str(item) for item in missing) or "none")
+        )
+    present = observation.get("present")
+    if isinstance(present, list):
+        parts.append(
+            "<p><strong>Present:</strong> %s</p>"
+            % _esc(", ".join(str(item) for item in present) or "none")
+        )
+    parts.append(
         "<h3>Request</h3><p><code>%s</code> %s</p><pre>%s</pre>"
         % (
             _esc(request.get("method", "GET")),
             _esc(request.get("url", "")),
             _esc(_headers_text(request.get("headers"))),
-        ),
-    ]
+        )
+    )
     if response is None:
         parts.append("<h3>Response</h3><p>No response captured.</p>")
     else:
@@ -392,7 +406,7 @@ bundles are the evidence; this HTML file is not signed.</p>
 <h2>What this report does not claim</h2>
 <p><strong>No secure verdict.</strong> Pry does not certify this app as secure. NOT_REPRODUCED means a suspected issue could not be confirmed; it is not proof of absence. Absence of a reproduced finding is not a guarantee of safety.</p>
 <p><strong>What VALID means.</strong> VALID means the bundle's embedded key verified the signature. It is tamper-evidence, not proof of who created it; pin the fingerprint to trust a signer.</p>
-<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR discovery, exposed database rules, header-only findings, general authenticated scanning, write-based checks, live SSRF, live rate-limit probing, and Level 2 are not implemented. Configured live and local IDOR checks, local Level 1 SSRF, and a bounded local rate-limit observation are available.</p>
+<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR discovery, exposed database rules, general authenticated scanning, write-based checks, live SSRF, live rate-limit probing, and Level 2 are not implemented. Configured live and local IDOR checks, local Level 1 SSRF, a bounded local rate-limit observation, and opt-in header observations are available.</p>
 </section>
 <section>
 <h2>Target</h2>
