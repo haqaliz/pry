@@ -1,50 +1,68 @@
-# Live Rate-Limit Observation (P4 remainder)
+# Local Level 2 Write Confirmation (P4 remainder)
 
 - **Type:** feat
-- **Slug:** `live-rate-limit`
+- **Slug:** `level2-writes`
 - **Owner:** aliz
 - **Source:** inline brief. No GitHub issue.
-- **Capability:** P4 — bounded live rate-limit observation.
+- **Capability:** P4 — declared unauthenticated write confirmation in the local sandbox.
 
 ## Brief
 
-The local rate-limit observation exists; the live path rejects all level 1 checks. A bounded
-live sample is useful for the app owner, but it carries load and lockout risk. This slice allows
-it only with an explicit per-target `--confirm`, a hard cap of 5 GETs, 0.5s spacing, and an
-immediate stop on the first 429/503/`Retry-After`. It is an unsigned hardening observation,
-never `EXPOSED`, never a proof, and never changes the exit code.
+Level 2 exists in the roadmap but nothing runs. The safe first slice is local-only: the owner
+declares one write that should require auth, Pry sends it with no credentials inside the
+disposable sandbox, then reads a declared verification path. `EXPOSED` only when the write is
+accepted and the verification read contains the unique marker that Pry generated. Live writes
+stay rejected.
 
 ## Flow
 
 ```bash
-pry scan https://example.com --token <token> \
-  --level 1 --confirm --rate-limit-endpoint /login --rate-limit-count 3
+chmod 600 write.json
+pry scan ./my-app --level 2 --confirm --write-config write.json
 ```
 
-One declared path, no auth, GET only. Local behavior and the 1–20 local cap are unchanged.
+`write.json`:
+
+```json
+{
+  "method": "POST",
+  "endpoint": "/api/items",
+  "body": "{\"name\": \"{{marker}}\"}",
+  "verify_endpoint": "/api/items",
+  "verify_contains": "{{marker}}"
+}
+```
+
+Pry replaces `{{marker}}` with a fresh `pry-<hex>` value, sends the write unauthenticated, then
+GETs the verification path. The write response is the captured pair; the verification request
+and response are nested under `response.verification` in `results.json` and the signed proof.
 
 ## Scope
 
-- Live `--level 1` allowed only with `--confirm` and `--rate-limit-endpoint`.
-- Live cap 5, default 5; spacing 0.5s; stop on 429/503/`Retry-After`.
-- Observation in `results.json`, CLI/JSON, report; no proof, no verdict.
-- P1 token is validated before any request.
-- Live SSRF stays rejected; IDOR still works at level 0.
-- Tests: validation, live scan, CLI gating, no-proof/exit-neutral.
-- Docs/ETHICS: bounded live sample policy and risk.
+- Local `--level 2 --confirm --write-config FILE`; config 0600.
+- Methods POST/PUT/PATCH only; path-only endpoints; 4 KiB body cap; no auth.
+- `EXPOSED` only for write 2xx + verify 2xx + unique marker in the verify body.
+- Write rejected (401/403/404) or marker absent → `NOT_REPRODUCED`; transport/write 5xx →
+  `UNVERIFIED`.
+- Temp config 0600, read-only mount, removed on every path.
+- Signed proof and report for `EXPOSED`.
+- Docker fixture with an unauthenticated write and a verification read.
+- Docs: local-only, marker, live writes deferred, no secure.
 
 ## Out of scope
 
-- Live SSRF, Level 2 writes, IDOR discovery, provider DB rules, hosted reports.
-- Load testing, concurrency, credential use.
-- Treating a missing limit as `EXPOSED`.
+- Live writes, DELETE, file uploads, auth, multi-step workflows.
+- IDOR discovery, provider DB rules, live SSRF, hosted reports.
+- Discovery of write endpoints.
 
 ## Acceptance criteria
 
-- Live level 1 + confirm + endpoint → one `rate_limit` observation.
-- 429/503/Retry-After → `THROTTLED`, stop immediately.
-- Count 6 → exit 2 before any request; default 5.
-- Missing `--confirm` or endpoint → exit 2 before any request.
-- SSRF flags on a URL → exit 2 before any request.
-- No verification/proof; exit code unchanged by the observation.
-- No "secure" claim; docs state the load/lockout risk.
+- POST 201 + GET 200 containing the marker → EXPOSED, signed, report.
+- Write 401/403/404 → NOT_REPRODUCED.
+- Write 2xx but marker absent → NOT_REPRODUCED.
+- Write 5xx or transport → UNVERIFIED.
+- Level 2 without `--confirm` or `--write-config` → exit 2, no scan.
+- Config 0644/missing/invalid/absolute path/`{{marker}}` absent → exit 2, no scan.
+- Live URL with `--write-config` → exit 2, no request.
+- Config path/body secrets absent from outputs; temp config removed.
+- No "secure" claim.
