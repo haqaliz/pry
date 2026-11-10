@@ -240,10 +240,13 @@ class DockerRunner:
         script_path,
         image: str = "python:3.9-slim",
         timeout: float = START_TIMEOUT,
+        config_path=None,
     ) -> str:
         args = ["run", "-d", "--name", name, "--network=%s" % network]
         args += self._security_args()
         args += ["-v", "%s:/pry/sidecar.py:ro" % script_path]
+        if config_path is not None:
+            args += ["-v", "%s:/pry-config/idor.json:ro" % config_path]
         args += [image, "python", "-c", "import time; time.sleep(86400)"]
         result = self._checked(args, timeout, START_FAILED, "start sidecar")
         container_id = result.stdout.decode("utf-8", "replace").strip()

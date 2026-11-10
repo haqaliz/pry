@@ -40,6 +40,18 @@ RATE_LIMIT_MIN = 1
 RATE_LIMIT_MAX = 20
 RATE_LIMIT_SPACING = 0.1
 
+IDOR_CONTROL_FAILED = "IDOR_CONTROL_FAILED"
+REDACTED = "[redacted]"
+REDACTED_HEADERS = frozenset(
+    (
+        "cookie",
+        "authorization",
+        "set-cookie",
+        "x-api-key",
+        "proxy-authorization",
+    )
+)
+
 ERROR_PATH = "/__pry_missing__?id=%27"
 SECRET_PATHS = (
     "/.env",
@@ -148,6 +160,17 @@ def _headers(headers) -> dict:
         return {}
     items = headers.items() if hasattr(headers, "items") else headers
     return {str(name).lower(): str(value) for name, value in items}
+
+
+def _redact_headers(headers) -> dict:
+    if not isinstance(headers, dict):
+        return {}
+    return {
+        str(name).lower(): REDACTED
+        if str(name).lower() in REDACTED_HEADERS
+        else str(value)
+        for name, value in headers.items()
+    }
 
 
 def _read_text(response) -> str:
@@ -522,6 +545,155 @@ def probe_unauth(base_url: str, path: str, fetch=None) -> dict:
     )
 
 
+def _idor_result(verdict, cause, evidence, url, headers, response):
+    return {
+        "probe": "idor",
+        "verdict": verdict,
+        "cause": cause,
+        "evidence": evidence,
+        "request": _request("GET", url, _redact_headers(headers)),
+        "response": None
+        if response is None
+        else {
+            "status": response.status,
+            "headers": _redact_headers(response.headers),
+            "body": (response.body or "")[:BODY_LIMIT],
+        },
+    }
+
+
+def _idor_json_ok(response):
+    body = response.body or ""
+    content_type = _headers(response.headers).get("content-type", "")
+    return (
+        200 <= response.status < 300
+        and bool(body.strip())
+        and (
+            "json" in content_type.lower()
+            or body.lstrip().startswith(("{", "["))
+        )
+    )
+
+
+def _idor_attempt(fetch, url, headers):
+    try:
+        return fetch("GET", url, dict(headers)), None
+    except TransportError as exc:
+        return None, exc
+
+
+def _idor_control_evidence(label, path, response, error):
+    if error is not None:
+        return "control %s: GET %s failed: %s" % (
+            label,
+            path,
+            error.message or "request failed",
+        )
+    if _idor_json_ok(response):
+        return "control %s: GET %s returned status %d with a non-empty JSON body" % (
+            label,
+            path,
+            response.status,
+        )
+    return (
+        "control %s: GET %s returned status %d (not a 2xx JSON response)"
+        % (label, path, response.status)
+    )
+
+
+def probe_idor(
+    base_url, headers_a, headers_b, object_a, object_b, fetch=None
+) -> dict:
+    """Run A->A and B->B controls, then A->B; only a clean cross is EXPOSED."""
+    fetch = fetch if fetch is not None else urllib_fetch
+    for path in (object_a, object_b):
+        if not _is_endpoint_path(path):
+            return _idor_result(
+                UNVERIFIED,
+                INVALID_ENDPOINT,
+                "invalid object path %r: not path-only" % (path,),
+                path,
+                headers_a,
+                None,
+            )
+
+    base = base_url.rstrip("/")
+    attempts = []
+    for label, path, identity_headers in (
+        ("A", object_a, headers_a),
+        ("B", object_b, headers_b),
+    ):
+        response, error = _idor_attempt(fetch, base + path, identity_headers)
+        attempts.append((label, path, identity_headers, response, error))
+
+    evidence = "; ".join(
+        _idor_control_evidence(label, path, response, error)
+        for label, path, _identity_headers, response, error in attempts
+    )
+    failing = next(
+        (
+            attempt
+            for attempt in attempts
+            if attempt[3] is None or not _idor_json_ok(attempt[3])
+        ),
+        None,
+    )
+    if failing is not None:
+        _label, path, identity_headers, response, _error = failing
+        return _idor_result(
+            UNVERIFIED,
+            IDOR_CONTROL_FAILED,
+            evidence + "; the cross request was not attempted",
+            base + path,
+            identity_headers,
+            response,
+        )
+
+    cross_url = base + object_b
+    response, error = _idor_attempt(fetch, cross_url, headers_a)
+    if error is not None:
+        return _idor_result(
+            UNVERIFIED,
+            error.cause,
+            evidence
+            + "; cross: GET %s failed: %s"
+            % (object_b, error.message or "request failed"),
+            cross_url,
+            headers_a,
+            None,
+        )
+
+    if _idor_json_ok(response):
+        verdict = EXPOSED
+        cause = None
+        cross = (
+            "cross: GET %s returned status %d with a non-empty JSON body for "
+            "the object declared as identity B's" % (object_b, response.status)
+        )
+    elif response.status in (401, 403, 404):
+        verdict = NOT_REPRODUCED
+        cause = None
+        cross = "cross: GET %s returned status %d; the request was rejected" % (
+            object_b,
+            response.status,
+        )
+    else:
+        verdict = UNVERIFIED
+        cause = None
+        cross = (
+            "cross: GET %s returned status %d; cannot confirm the check"
+            % (object_b, response.status)
+        )
+    return _idor_result(
+        verdict,
+        cause,
+        evidence + "; " + cross,
+        cross_url,
+        headers_a,
+        response,
+    )
+
+
 PROBES = {
     "cors": probe_cors,
     "errors": probe_errors,
@@ -637,16 +809,74 @@ def probe_rate_limit(base_url, path, count, fetch=None, sleep=None) -> dict:
     )
 
 
+def _identity_headers(data, field):
+    identity = data.get(field)
+    headers = identity.get("headers") if isinstance(identity, dict) else None
+    if not isinstance(headers, dict) or not all(
+        isinstance(name, str) and isinstance(value, str)
+        for name, value in headers.items()
+    ):
+        raise ValueError("invalid idor config: %s.headers" % field)
+    return headers
+
+
+def _read_idor_config(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        raise ValueError("cannot read the idor config")
+    if not isinstance(data, dict):
+        raise ValueError("invalid idor config: expected a JSON object")
+    for field in ("object_a", "object_b"):
+        if not isinstance(data.get(field), str):
+            raise ValueError("invalid idor config: %s" % field)
+    return (
+        _identity_headers(data, "identity_a"),
+        _identity_headers(data, "identity_b"),
+        data.get("object_a"),
+        data.get("object_b"),
+    )
+
+
 def main(argv=None, fetch=None, sleep=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     usage = (
         "usage: sidecar.py {cors|errors|secrets} BASE_URL | "
         "sidecar.py unauth BASE_URL PATH | "
-        "sidecar.py rate_limit BASE_URL PATH COUNT\n"
+        "sidecar.py rate_limit BASE_URL PATH COUNT | "
+        "sidecar.py idor BASE_URL CONFIG_PATH\n"
     )
     if not args:
         sys.stderr.write(usage)
         return 2
+    if args[0] == "idor":
+        if len(args) != 3:
+            sys.stderr.write(usage)
+            return 2
+        _, base_url, config_path = args
+        try:
+            headers_a, headers_b, object_a, object_b = _read_idor_config(
+                config_path
+            )
+        except ValueError as exc:
+            sys.stderr.write("error: %s\n" % exc)
+            sys.stderr.write(usage)
+            return 2
+        print(
+            json.dumps(
+                probe_idor(
+                    base_url,
+                    headers_a,
+                    headers_b,
+                    object_a,
+                    object_b,
+                    fetch=fetch,
+                ),
+                sort_keys=True,
+            )
+        )
+        return 0
     if args[0] == "rate_limit":
         if len(args) != 4:
             sys.stderr.write(usage)

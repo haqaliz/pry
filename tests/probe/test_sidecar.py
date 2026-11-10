@@ -6,6 +6,7 @@ Every probe takes an injected ``fetch``; nothing here opens a socket.
 import ast
 import io
 import json
+import os
 import socket
 import urllib.error
 from pathlib import Path
@@ -735,3 +736,273 @@ def test_main_prints_a_rate_limit_transport_failure_as_unverified_json(capsys):
     assert payload["status"] == sidecar.UNVERIFIED
     assert "timed out" in payload["evidence"]
     assert "Traceback" not in captured.err
+
+
+# --- configured IDOR (sidecar mode) ---------------------------------------
+
+IDOR_OBJECT_A = "/api/orders/1"
+IDOR_OBJECT_B = "/api/orders/2"
+IDOR_SECRET_A = "sidecar-alice-session"
+IDOR_SECRET_B = "sidecar-bob-session"
+IDOR_TOKEN_A = "sidecar-alice-token"
+IDOR_API_KEY_B = "sidecar-bob-api-key"
+IDOR_A = {
+    "Cookie": "sid=" + IDOR_SECRET_A,
+    "Authorization": "Bearer " + IDOR_TOKEN_A,
+}
+IDOR_B = {
+    "Cookie": "sid=" + IDOR_SECRET_B,
+    "X-Api-Key": IDOR_API_KEY_B,
+}
+
+
+def _idor_response(status=200, body='{"ok": true}', headers=None, path=IDOR_OBJECT_A):
+    return sidecar.Response(
+        status,
+        {"Content-Type": "application/json"} if headers is None else headers,
+        body,
+        BASE + path,
+    )
+
+
+def _probe_idor(fetch):
+    return sidecar.probe_idor(
+        BASE, IDOR_A, IDOR_B, IDOR_OBJECT_A, IDOR_OBJECT_B, fetch=fetch
+    )
+
+
+def test_sidecar_idor_passing_controls_and_cross_is_exposed():
+    fetch = FakeFetch(
+        _idor_response(200, '{"id": 1}'),
+        _idor_response(200, '{"id": 2}', path=IDOR_OBJECT_B),
+        _idor_response(200, '{"id": 2, "owner": "b"}', path=IDOR_OBJECT_B),
+    )
+
+    result = _probe_idor(fetch)
+
+    assert result["probe"] == "idor"
+    assert result["verdict"] == sidecar.EXPOSED
+    assert result["cause"] is None
+    assert "control A" in result["evidence"]
+    assert "control B" in result["evidence"]
+    assert IDOR_OBJECT_A in result["evidence"]
+    assert IDOR_OBJECT_B in result["evidence"]
+    assert fetch.calls == [
+        ("GET", BASE + IDOR_OBJECT_A, IDOR_A),
+        ("GET", BASE + IDOR_OBJECT_B, IDOR_B),
+        ("GET", BASE + IDOR_OBJECT_B, IDOR_A),
+    ]
+    assert ProbeResult(**result).verdict == sidecar.EXPOSED
+
+
+def test_sidecar_idor_cross_rejected_is_not_reproduced():
+    fetch = FakeFetch(
+        _idor_response(200),
+        _idor_response(200, path=IDOR_OBJECT_B),
+        _idor_response(403, '{"error": "forbidden"}', path=IDOR_OBJECT_B),
+    )
+
+    result = _probe_idor(fetch)
+
+    assert result["verdict"] == sidecar.NOT_REPRODUCED
+    assert result["cause"] is None
+    assert result["response"]["status"] == 403
+    assert IDOR_OBJECT_B in result["evidence"]
+
+
+@pytest.mark.parametrize(
+    "response_a,response_b,failing",
+    [
+        (_idor_response(403, "denied"), _idor_response(200, path=IDOR_OBJECT_B), IDOR_OBJECT_A),
+        (_idor_response(200), _idor_response(403, "denied", path=IDOR_OBJECT_B), IDOR_OBJECT_B),
+        (_idor_response(200, "<html>login</html>", {"Content-Type": "text/html"}), _idor_response(200, path=IDOR_OBJECT_B), IDOR_OBJECT_A),
+        (_idor_response(500, "boom"), _idor_response(200, path=IDOR_OBJECT_B), IDOR_OBJECT_A),
+    ],
+)
+def test_sidecar_idor_a_failed_control_is_unverified_without_the_cross(
+    response_a, response_b, failing
+):
+    fetch = FakeFetch(response_a, response_b)
+
+    result = _probe_idor(fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.IDOR_CONTROL_FAILED
+    assert len(fetch.calls) == 2
+    assert failing in result["evidence"]
+
+
+def test_sidecar_idor_control_transport_failure_is_unverified():
+    fetch = FakeFetch(
+        sidecar.TransportError(sidecar.TARGET_UNREACHABLE, "connection refused"),
+        _idor_response(200, path=IDOR_OBJECT_B),
+    )
+
+    result = _probe_idor(fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.IDOR_CONTROL_FAILED
+    assert result["response"] is None
+    assert len(fetch.calls) == 2
+
+
+def test_sidecar_idor_cross_transport_failure_is_unverified():
+    fetch = FakeFetch(
+        _idor_response(200),
+        _idor_response(200, path=IDOR_OBJECT_B),
+        sidecar.TransportError(sidecar.REQUEST_TIMEOUT, "request timed out"),
+    )
+
+    result = _probe_idor(fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.REQUEST_TIMEOUT
+    assert result["response"] is None
+
+
+def test_sidecar_idor_an_inconclusive_cross_is_unverified():
+    fetch = FakeFetch(
+        _idor_response(200),
+        _idor_response(200, path=IDOR_OBJECT_B),
+        _idor_response(500, "boom", path=IDOR_OBJECT_B),
+    )
+
+    result = _probe_idor(fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["verdict"] != sidecar.EXPOSED
+
+
+@pytest.mark.parametrize("path", ["http://evil.invalid/1", "api/orders/1", "", "/x y"])
+def test_sidecar_idor_refuses_a_non_path_object_before_any_fetch(path):
+    fetch = FakeFetch()
+
+    result = sidecar.probe_idor(BASE, IDOR_A, IDOR_B, path, IDOR_OBJECT_B, fetch=fetch)
+
+    assert result["verdict"] == sidecar.UNVERIFIED
+    assert result["cause"] == sidecar.INVALID_ENDPOINT
+    assert result["response"] is None
+    assert fetch.calls == []
+    assert IDOR_SECRET_A not in json.dumps(result)
+
+
+def test_sidecar_idor_redacts_stored_credentials_but_not_the_request():
+    response_headers = {
+        "Content-Type": "application/json",
+        "Set-Cookie": "sid=" + IDOR_SECRET_B,
+        "Authorization": "Bearer " + IDOR_TOKEN_A,
+    }
+    fetch = FakeFetch(
+        _idor_response(200, '{"id": 1}', response_headers),
+        _idor_response(200, '{"id": 2}', response_headers, IDOR_OBJECT_B),
+        _idor_response(200, '{"id": 2}', response_headers, IDOR_OBJECT_B),
+    )
+
+    result = _probe_idor(fetch)
+
+    stored = json.dumps(result)
+    for secret in (IDOR_SECRET_A, IDOR_SECRET_B, IDOR_TOKEN_A, IDOR_API_KEY_B):
+        assert secret not in stored
+
+    assert result["request"]["headers"] == {
+        "cookie": "[redacted]",
+        "authorization": "[redacted]",
+    }
+    assert set(result["response"]["headers"]) == {
+        "content-type",
+        "set-cookie",
+        "authorization",
+    }
+    assert result["response"]["headers"]["set-cookie"] == "[redacted]"
+    assert result["response"]["headers"]["authorization"] == "[redacted]"
+    assert result["response"]["headers"]["content-type"] == "application/json"
+
+    # The fake fetch saw the real values, not the redacted ones.
+    assert fetch.calls[0][2] == IDOR_A
+    assert fetch.calls[1][2] == IDOR_B
+    assert fetch.calls[2][2] == IDOR_A
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        None,
+        "{not json",
+        "[]",
+        '{"identity_a": {"headers": {"Cookie": "a=1"}}}',
+        '{"identity_a": {"headers": {"Cookie": "a=1"}}, '
+        '"identity_b": {"headers": []}, "object_a": "/a", "object_b": "/b"}',
+        '{"identity_a": {"headers": {"Cookie": 1}}, '
+        '"identity_b": {"headers": {"Cookie": "b=2"}}, '
+        '"object_a": "/a", "object_b": "/b"}',
+        '{"identity_a": {"headers": {"Cookie": "a=1"}}, '
+        '"identity_b": {"headers": {"Cookie": "b=2"}}}',
+    ],
+)
+def test_main_reports_a_bad_idor_config_without_a_traceback(tmp_path, capsys, data):
+    path = tmp_path / "idor.json"
+    if data is not None:
+        path.write_text(data, encoding="utf-8")
+        os.chmod(str(path), 0o600)
+
+    code = sidecar.main(["idor", BASE, str(path)], fetch=FakeFetch())
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert "usage" in captured.err.lower()
+    assert "Traceback" not in captured.err
+    assert str(path) not in captured.err
+    assert IDOR_SECRET_A not in captured.err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["idor", BASE], ["idor", BASE, "one.json", "extra"]],
+)
+def test_main_rejects_idor_with_the_wrong_argument_count(argv, capsys):
+    code = sidecar.main(argv, fetch=FakeFetch())
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert "usage" in captured.err.lower()
+
+
+def test_main_reads_the_idor_config_and_prints_redacted_json(capsys, tmp_path):
+    path = tmp_path / "idor.json"
+    path.write_text(
+        json.dumps(
+            {
+                "identity_a": {"headers": IDOR_A},
+                "identity_b": {"headers": IDOR_B},
+                "object_a": IDOR_OBJECT_A,
+                "object_b": IDOR_OBJECT_B,
+            }
+        ),
+        encoding="utf-8",
+    )
+    os.chmod(str(path), 0o600)
+    fetch = FakeFetch(
+        _idor_response(200, '{"id": 1}'),
+        _idor_response(200, '{"id": 2}', path=IDOR_OBJECT_B),
+        _idor_response(200, '{"id": 2}', path=IDOR_OBJECT_B),
+    )
+
+    code = sidecar.main(["idor", BASE, str(path)], fetch=fetch)
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert captured.err == ""
+    assert captured.out.count("\n") == 1
+    payload = json.loads(captured.out)
+    assert payload["probe"] == "idor"
+    assert payload["verdict"] == sidecar.EXPOSED
+    assert captured.out.count(IDOR_SECRET_A) == 0
+    assert IDOR_SECRET_B not in captured.out
+    assert str(path) not in captured.out
+    assert fetch.calls == [
+        ("GET", BASE + IDOR_OBJECT_A, IDOR_A),
+        ("GET", BASE + IDOR_OBJECT_B, IDOR_B),
+        ("GET", BASE + IDOR_OBJECT_B, IDOR_A),
+    ]

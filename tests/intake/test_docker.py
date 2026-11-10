@@ -429,6 +429,40 @@ def test_start_sidecar_nonzero_is_start_failed(tmp_path):
     assert exc.value.cause == START_FAILED
 
 
+def test_start_sidecar_mounts_an_idor_config_read_only(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"sidecar123\n", b"", False)])
+    script = tmp_path / "sidecar.py"
+    script.write_text("")
+    config = tmp_path / "idor.json"
+    config.write_text("{}")
+    os.chmod(str(config), 0o600)
+
+    DockerRunner(runner=fake, uid=501, gid=20).start_sidecar(
+        "pry-abc", "pry-sidecar", script, config_path=config
+    )
+
+    argv, _ = fake.calls[0]
+    _pair(argv, "-v", "%s:/pry-config/idor.json:ro" % config)
+    _pair(argv, "-v", "%s:/pry/sidecar.py:ro" % script)
+    _assert_security(argv)
+    assert "-p" not in argv
+    assert "-P" not in argv
+    for token in argv:
+        for forbidden in FORBIDDEN:
+            assert forbidden not in token, (forbidden, argv)
+
+
+def test_start_sidecar_without_a_config_mounts_no_config(tmp_path):
+    fake = FakeRunner([CommandResult(0, b"sidecar123\n", b"", False)])
+    script = tmp_path / "sidecar.py"
+    script.write_text("")
+
+    DockerRunner(runner=fake).start_sidecar("pry-abc", "pry-sidecar", script)
+
+    argv, _ = fake.calls[0]
+    assert not any("/pry-config" in token for token in argv)
+
+
 def test_start_callback_sidecar_mounts_the_probe_dir_read_only(tmp_path):
     fake = FakeRunner([CommandResult(0, b"callback123\n", b"", False)])
     source_dir = tmp_path / "probe"
