@@ -104,14 +104,14 @@ The first slice checks five classes:
 4. **Unauthenticated endpoints** — declare protected paths with `--endpoint`; a 200 JSON
    response with no `Authorization` or `Cookie` header is EXPOSED. 401/403/404, a redirect, a
    2xx HTML login page, or an empty body is NOT_REPRODUCED.
-5. **Configured live IDOR** — with `--idor-config`, two identities and two object paths; A→B
-   200 JSON while both controls succeed is EXPOSED. The config is 0600 and credentials are
-   redacted.
+5. **Configured IDOR** — with `--idor-config`, two identities and two object paths; A→B
+   200 JSON while both controls succeed is EXPOSED. Live and local; the config is 0600 and
+   credentials are redacted.
 
 The endpoint list is your declaration: Pry does not discover routes or infer auth from code.
 The result is "this declared-protected path returned data with no credentials," not "the app
-has no authentication." Endpoint discovery, IDOR discovery, local IDOR, exposed database
-rules, and header-only findings are deferred. See [`ETHICS.md`](ETHICS.md) for what an
+has no authentication." Endpoint discovery, IDOR discovery, exposed database rules, and header
+policy analysis are deferred. See [`ETHICS.md`](ETHICS.md) for what an
 exposure does and does not assert.
 
 ```bash
