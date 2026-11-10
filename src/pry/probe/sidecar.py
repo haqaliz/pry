@@ -40,6 +40,17 @@ RATE_LIMIT_MIN = 1
 RATE_LIMIT_MAX = 20
 RATE_LIMIT_SPACING = 0.1
 
+HEADER_PROBE = "headers"
+HSTS_HEADER = "strict-transport-security"
+RECOMMENDED_HEADERS = (
+    "content-security-policy",
+    "x-content-type-options",
+    "x-frame-options",
+    "referrer-policy",
+    "permissions-policy",
+    "cross-origin-opener-policy",
+)
+
 IDOR_CONTROL_FAILED = "IDOR_CONTROL_FAILED"
 REDACTED = "[redacted]"
 REDACTED_HEADERS = frozenset(
@@ -809,6 +820,62 @@ def probe_rate_limit(base_url, path, count, fetch=None, sleep=None) -> dict:
     )
 
 
+def _headers_observation(status, evidence, url, headers, response, missing, present):
+    return {
+        "probe": HEADER_PROBE,
+        "status": status,
+        "evidence": evidence,
+        "request": _request("GET", url, headers),
+        "response": None
+        if response is None
+        else {
+            "status": response.status,
+            "headers": _headers(response.headers),
+            "body": (response.body or "")[:BODY_LIMIT],
+        },
+        "missing": list(missing),
+        "present": list(present),
+    }
+
+
+def probe_headers(base_url: str, fetch=None) -> dict:
+    """Observe recommended response headers on '/', never a verdict."""
+    fetch = fetch if fetch is not None else urllib_fetch
+    url = base_url.rstrip("/") + "/"
+    headers = {"User-Agent": USER_AGENT}
+    recommended = list(RECOMMENDED_HEADERS)
+    if urllib.parse.urlsplit(url).scheme.lower() == "https":
+        recommended.append(HSTS_HEADER)
+    try:
+        response = fetch("GET", url, headers)
+    except TransportError as exc:
+        return _headers_observation(
+            UNVERIFIED,
+            "%s: transport failure: %s"
+            % (exc.cause, exc.message or "request failed"),
+            url,
+            headers,
+            None,
+            [],
+            [],
+        )
+
+    values = _headers(response.headers)
+    missing = [name for name in recommended if name not in values]
+    present = [name for name in recommended if name in values]
+    return _headers_observation(
+        OBSERVED,
+        "%d recommended response headers checked on /: %d present, %d "
+        "missing (hardening observation)"
+        % (len(recommended), len(present), len(missing)),
+        url,
+        headers,
+        response,
+        missing,
+        present,
+    )
+
+
 def _identity_headers(data, field):
     identity = data.get(field)
     headers = identity.get("headers") if isinstance(identity, dict) else None
@@ -842,7 +909,7 @@ def _read_idor_config(path):
 def main(argv=None, fetch=None, sleep=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     usage = (
-        "usage: sidecar.py {cors|errors|secrets} BASE_URL | "
+        "usage: sidecar.py {cors|errors|secrets|headers} BASE_URL | "
         "sidecar.py unauth BASE_URL PATH | "
         "sidecar.py rate_limit BASE_URL PATH COUNT | "
         "sidecar.py idor BASE_URL CONFIG_PATH\n"
@@ -850,6 +917,16 @@ def main(argv=None, fetch=None, sleep=None) -> int:
     if not args:
         sys.stderr.write(usage)
         return 2
+    if args[0] == HEADER_PROBE:
+        if len(args) != 2:
+            sys.stderr.write(usage)
+            return 2
+        print(
+            json.dumps(
+                probe_headers(args[1], fetch=fetch), sort_keys=True
+            )
+        )
+        return 0
     if args[0] == "idor":
         if len(args) != 3:
             sys.stderr.write(usage)

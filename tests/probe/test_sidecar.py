@@ -969,6 +969,161 @@ def test_main_rejects_idor_with_the_wrong_argument_count(argv, capsys):
     assert "usage" in captured.err.lower()
 
 
+# --- response header observation (sidecar mode) ---------------------------
+
+HEADERS_BASE = "http://app:3000"
+HTTPS_BASE = "https://app:3000"
+
+
+def _headers_response(headers=None, body="ok", status=200, base=HEADERS_BASE):
+    return sidecar.Response(status, headers or {}, body, base + "/")
+
+
+def test_headers_observation_lists_missing_and_present_in_recommended_order():
+    fetch = FakeFetch(
+        _headers_response(
+            {
+                "X-Frame-Options": "DENY",
+                "X-Content-Type-Options": "nosniff",
+            }
+        )
+    )
+
+    result = sidecar.probe_headers(HEADERS_BASE, fetch=fetch)
+
+    assert result["probe"] == "headers"
+    assert result["status"] == sidecar.OBSERVED
+    assert result["present"] == [
+        "x-content-type-options",
+        "x-frame-options",
+    ]
+    assert result["missing"] == [
+        name
+        for name in sidecar.RECOMMENDED_HEADERS
+        if name not in ("x-content-type-options", "x-frame-options")
+    ]
+    assert "hardening observation" in result["evidence"]
+    assert "secure" not in result["evidence"].lower()
+    assert fetch.calls == [
+        ("GET", HEADERS_BASE + "/", {"User-Agent": sidecar.USER_AGENT})
+    ]
+    assert len(fetch.calls) == 1
+    assert result["request"] == {
+        "method": "GET",
+        "url": HEADERS_BASE + "/",
+        "headers": {"user-agent": sidecar.USER_AGENT},
+    }
+    assert set(result) == {
+        "probe",
+        "status",
+        "evidence",
+        "request",
+        "response",
+        "missing",
+        "present",
+    }
+    assert "verdict" not in result
+    assert "proof" not in result
+
+
+def test_headers_observation_requires_hsts_only_over_https():
+    http_fetch = FakeFetch(
+        _headers_response({"Strict-Transport-Security": "max-age=1"})
+    )
+    https_fetch = FakeFetch(
+        _headers_response(
+            {"Strict-Transport-Security": "max-age=1"}, base=HTTPS_BASE
+        )
+    )
+
+    http_result = sidecar.probe_headers(HEADERS_BASE, fetch=http_fetch)
+    https_result = sidecar.probe_headers(HTTPS_BASE, fetch=https_fetch)
+
+    assert sidecar.HSTS_HEADER not in http_result["missing"]
+    assert sidecar.HSTS_HEADER not in http_result["present"]
+    assert len(http_result["missing"]) == len(sidecar.RECOMMENDED_HEADERS)
+    assert "strict-transport-security" not in sidecar.RECOMMENDED_HEADERS
+    assert https_result["present"] == ["strict-transport-security"]
+    assert https_result["missing"] == list(sidecar.RECOMMENDED_HEADERS)
+    assert https_fetch.calls[0][1] == HTTPS_BASE + "/"
+
+
+def test_headers_observation_lowercases_response_headers_and_caps_the_body():
+    fetch = FakeFetch(
+        _headers_response(
+            {"X-Test": "1"}, body="x" * (sidecar.BODY_LIMIT * 2)
+        )
+    )
+
+    result = sidecar.probe_headers(HEADERS_BASE, fetch=fetch)
+
+    assert result["response"]["headers"] == {"x-test": "1"}
+    assert len(result["response"]["body"]) == sidecar.BODY_LIMIT
+    assert sidecar.BODY_LIMIT == 4096
+
+
+def test_headers_observation_normalizes_a_trailing_slash():
+    fetch = FakeFetch(_headers_response())
+
+    sidecar.probe_headers(HEADERS_BASE + "///", fetch=fetch)
+
+    assert fetch.calls[0][1] == HEADERS_BASE + "/"
+
+
+def test_headers_transport_failure_is_unverified():
+    fetch = FakeFetch(
+        sidecar.TransportError(sidecar.TARGET_UNREACHABLE, "connection refused")
+    )
+
+    result = sidecar.probe_headers(HEADERS_BASE, fetch=fetch)
+
+    assert result["status"] == sidecar.UNVERIFIED
+    assert result["response"] is None
+    assert result["missing"] == []
+    assert result["present"] == []
+    assert sidecar.TARGET_UNREACHABLE in result["evidence"]
+    assert "Traceback" not in result["evidence"]
+    assert "verdict" not in result
+
+
+def test_the_headers_observation_is_not_a_probe_result():
+    fetch = FakeFetch(_headers_response())
+
+    result = sidecar.probe_headers(HEADERS_BASE, fetch=fetch)
+
+    with pytest.raises(TypeError):
+        ProbeResult(**result)
+
+
+def test_main_accepts_headers(capsys):
+    fetch = FakeFetch(_headers_response({"X-Frame-Options": "DENY"}))
+
+    code = sidecar.main(["headers", HEADERS_BASE], fetch=fetch)
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert captured.err == ""
+    assert captured.out.count("\n") == 1
+    payload = json.loads(captured.out)
+    assert payload["probe"] == "headers"
+    assert payload["status"] == sidecar.OBSERVED
+    assert payload["present"] == ["x-frame-options"]
+    assert fetch.calls[0][1] == HEADERS_BASE + "/"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["headers"], ["headers", HEADERS_BASE, "extra"]],
+)
+def test_main_rejects_headers_with_the_wrong_argument_count(argv, capsys):
+    code = sidecar.main(argv, fetch=FakeFetch())
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert captured.out == ""
+    assert "usage" in captured.err.lower()
+
+
 def test_main_reads_the_idor_config_and_prints_redacted_json(capsys, tmp_path):
     path = tmp_path / "idor.json"
     path.write_text(
