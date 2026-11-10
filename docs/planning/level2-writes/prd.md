@@ -1,6 +1,7 @@
 # PRD — Local Level 2 Write Confirmation (P4 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Local Level 2 write confirmation implemented;
+  live writes, live SSRF, provider database/open-rule checks, and hosted reports are deferred.
 - **Owner:** aliz
 - **Slug:** `level2-writes`
 - **Capability:** P4 — write-based confirmation, local sandbox slice
