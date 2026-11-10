@@ -17,6 +17,9 @@ RATE_LIMIT_PROBE_INVALID = "RATE_LIMIT_PROBE_INVALID"
 RATE_LIMIT_MIN_COUNT = 1
 RATE_LIMIT_MAX_COUNT = 20
 RATE_LIMIT_DEFAULT_COUNT = 10
+LIVE_RATE_LIMIT_MAX_COUNT = 5
+LIVE_RATE_LIMIT_DEFAULT_COUNT = 5
+LIVE_RATE_LIMIT_SPACING = 0.5
 
 
 @dataclass(frozen=True)
@@ -25,7 +28,9 @@ class RateLimitConfig:
     count: int
 
 
-def validate_rate_limit(endpoint, count) -> RateLimitConfig:
+def validate_rate_limit(
+    endpoint, count, max_count=RATE_LIMIT_MAX_COUNT
+) -> RateLimitConfig:
     """Accept a path-only endpoint and a bounded count, or fail before Docker."""
     from pry.probe.scan import validate_endpoints
 
@@ -44,12 +49,12 @@ def validate_rate_limit(endpoint, count) -> RateLimitConfig:
     if (
         isinstance(count, bool)
         or not isinstance(count, int)
-        or not RATE_LIMIT_MIN_COUNT <= count <= RATE_LIMIT_MAX_COUNT
+        or not RATE_LIMIT_MIN_COUNT <= count <= max_count
     ):
         raise ProbeError(
             RATE_LIMIT_CONFIG_INVALID,
             "invalid rate-limit count %r: expected an integer %d..%d"
-            % (count, RATE_LIMIT_MIN_COUNT, RATE_LIMIT_MAX_COUNT),
+            % (count, RATE_LIMIT_MIN_COUNT, max_count),
         )
     return RateLimitConfig(endpoint=endpoint, count=count)
 

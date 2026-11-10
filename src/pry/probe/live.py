@@ -11,6 +11,12 @@ from pry.intake.snapshot import new_run_dir, utc_now, write_snapshot
 from pry.own.target import normalize_target
 from pry.own.tokens import TokenSigner
 from pry.probe.idor import probe_idor
+from pry.probe.rate_limit import (
+    LIVE_RATE_LIMIT_MAX_COUNT,
+    LIVE_RATE_LIMIT_SPACING,
+    validate_rate_limit,
+)
+from pry.probe.results import ProbeError
 from pry.probe.results import ProbeResult
 from pry.probe.scan import (
     SCAN_VERSION,
@@ -23,6 +29,7 @@ from pry.probe.sidecar import (
     probe_database,
     probe_errors,
     probe_headers,
+    probe_rate_limit,
     probe_secrets,
     probe_unauth,
 )
@@ -81,12 +88,25 @@ def _run_probes(origin, endpoints, idor_config=None):
 
 
 def scan_live(
-    url, token, *, endpoints=None, out=None, idor_config=None, headers=False
+    url,
+    token,
+    *,
+    endpoints=None,
+    out=None,
+    idor_config=None,
+    headers=False,
+    rate_limit_config=None,
 ):
     """Prove ownership of ``url``, run the read-only probes, finalize."""
     target = normalize_target(url)
     proof = TokenSigner().validate(token, target)
     endpoints = validate_endpoints(endpoints)
+    if rate_limit_config is not None:
+        rate_limit_config = validate_rate_limit(
+            rate_limit_config.endpoint,
+            rate_limit_config.count,
+            max_count=LIVE_RATE_LIMIT_MAX_COUNT,
+        )
 
     sandbox_id = LIVE_PREFIX + secrets.token_hex(6)
     if out is None:
@@ -98,6 +118,15 @@ def scan_live(
 
     results = _run_probes(target.origin, endpoints, idor_config)
     observations = [probe_headers(target.origin)] if headers else []
+    if rate_limit_config is not None:
+        observations.append(
+            probe_rate_limit(
+                target.origin,
+                rate_limit_config.endpoint,
+                rate_limit_config.count,
+                spacing=LIVE_RATE_LIMIT_SPACING,
+            )
+        )
     results, summary, results_path, corpus_error = finalize_results(
         run_dir, snapshot, results, observations
     )

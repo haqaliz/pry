@@ -13,6 +13,12 @@ from pry.own.errors import OwnershipError
 from pry.own.target import normalize_target
 from pry.own.tokens import TokenSigner
 from pry.probe.idor import IdorConfig
+from pry.probe.rate_limit import (
+    LIVE_RATE_LIMIT_SPACING,
+    OBSERVED,
+    RATE_LIMIT_CONFIG_INVALID,
+    RateLimitConfig,
+)
 from pry.probe.results import (
     EXPOSED,
     NOT_REPRODUCED,
@@ -99,6 +105,7 @@ def sentinel(monkeypatch):
         "probe_database",
         "probe_unauth",
         "probe_idor",
+        "probe_rate_limit",
     ):
         monkeypatch.setattr(live, name, guard)
     return guard
@@ -474,3 +481,91 @@ def test_scan_live_never_writes_the_token(tmp_path, fake_probes, corpus_file):
         for path in (tmp_path / "run" / "proofs").glob("*.json")
     )
     assert all(token not in text for text in texts)
+
+
+def _rate_observation(count=3):
+    return {
+        "probe": "rate_limit",
+        "status": OBSERVED,
+        "evidence": "%d requests accepted without throttling (hardening observation)"
+        % count,
+        "request": {
+            "method": "GET",
+            "url": ORIGIN + "/login",
+            "headers": {"user-agent": "pry/0.1"},
+        },
+        "response": {"status": 200, "headers": {}, "body": "ok"},
+        "count": count,
+        "statuses": [200] * count,
+    }
+
+
+def test_scan_live_appends_a_rate_limit_observation_without_a_verdict(
+    tmp_path, fake_probes, monkeypatch
+):
+    calls = []
+
+    def rate_probe(base_url, path, count, **kwargs):
+        calls.append((base_url, path, count, kwargs))
+        return _rate_observation(count)
+
+    monkeypatch.setattr(live, "probe_rate_limit", rate_probe, raising=False)
+
+    outcome = live.scan_live(
+        ORIGIN,
+        _token(),
+        out=tmp_path / "run",
+        rate_limit_config=RateLimitConfig(endpoint="/login", count=3),
+    )
+
+    assert calls == [
+        (ORIGIN, "/login", 3, {"spacing": LIVE_RATE_LIMIT_SPACING})
+    ]
+    assert outcome.observations == [_rate_observation(3)]
+    assert all(result.probe != "rate_limit" for result in outcome.results)
+    observation = outcome.observations[0]
+    assert "verdict" not in observation
+    assert "proof" not in observation
+
+    data = json.loads(outcome.results_path.read_text(encoding="utf-8"))
+    assert data["observations"][0]["probe"] == "rate_limit"
+    assert all(result["probe"] != "rate_limit" for result in data["results"])
+
+
+def test_scan_live_rejects_a_rate_limit_count_over_the_live_cap(
+    tmp_path, sentinel, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        live,
+        "probe_rate_limit",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+        raising=False,
+    )
+
+    with pytest.raises(ProbeError) as exc:
+        live.scan_live(
+            ORIGIN,
+            _token(),
+            out=tmp_path / "run",
+            rate_limit_config=RateLimitConfig(endpoint="/login", count=6),
+        )
+
+    assert exc.value.cause == RATE_LIMIT_CONFIG_INVALID
+    assert calls == []
+    assert sentinel.calls == []
+    assert not (tmp_path / "run").exists()
+
+
+def test_scan_live_validates_the_token_before_the_rate_limit_probe(
+    tmp_path, sentinel
+):
+    with pytest.raises(OwnershipError):
+        live.scan_live(
+            ORIGIN,
+            "garbage",
+            out=tmp_path / "run",
+            rate_limit_config=RateLimitConfig(endpoint="/login", count=3),
+        )
+
+    assert sentinel.calls == []

@@ -809,7 +809,9 @@ def _rate_limit_observation(status, evidence, url, headers, response, count, sta
     }
 
 
-def probe_rate_limit(base_url, path, count, fetch=None, sleep=None) -> dict:
+def probe_rate_limit(
+    base_url, path, count, fetch=None, sleep=None, spacing=RATE_LIMIT_SPACING
+) -> dict:
     """Send up to ``count`` unauth GETs and observe throttling, never a verdict."""
     fetch = fetch if fetch is not None else urllib_fetch
     sleep = sleep if sleep is not None else time.sleep
@@ -847,7 +849,7 @@ def probe_rate_limit(base_url, path, count, fetch=None, sleep=None) -> dict:
     for index in range(count):
         attempt = index + 1
         if index:
-            sleep(RATE_LIMIT_SPACING)
+            sleep(spacing)
         try:
             response = fetch("GET", url, headers)
         except TransportError as exc:

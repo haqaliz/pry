@@ -373,3 +373,29 @@ def test_a_malformed_payload_is_unverified_and_never_a_verdict(payload):
     assert result["response"] is None
     assert "verdict" not in result
     assert "proof" not in result
+
+
+def test_validate_rate_limit_honours_a_lower_live_cap():
+    config = validate_rate_limit(PATH, 5, max_count=5)
+    assert config == RateLimitConfig(endpoint=PATH, count=5)
+
+    with pytest.raises(ProbeError) as exc:
+        validate_rate_limit(PATH, 6, max_count=5)
+    assert exc.value.cause == RATE_LIMIT_CONFIG_INVALID
+    assert "1..5" in exc.value.message
+
+
+def test_probe_rate_limit_uses_the_requested_spacing():
+    result, fetch, sleeps = _run(3, *[_response(200) for _ in range(3)])
+    assert sleeps.calls == [0.1, 0.1]
+
+    fetch = FakeFetch(*[_response(200) for _ in range(3)])
+    sleeps = Sleeps()
+    result = sidecar.probe_rate_limit(
+        BASE, PATH, 3, fetch=fetch, sleep=sleeps, spacing=0.5
+    )
+
+    assert result["status"] == OBSERVED
+    assert sleeps.calls == [0.5, 0.5]
+    assert "verdict" not in result
+    assert "proof" not in result
