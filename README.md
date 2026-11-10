@@ -19,10 +19,11 @@ return 200 JSON with no credentials. P5 read-only signed proof bundles implement
 and live read-only EXPOSED findings. P6 local findings report and corpus implemented. Live
 read-only scans and configured live IDOR checks are implemented for URLs with a P1 token;
 configured local IDOR runs in the sandbox. Local Level 1 SSRF and bounded local/live
-rate-limit observations are implemented with `--confirm`. Opt-in response header observations are
-implemented for local and live scans. IDOR discovery, provider database/open-rule checks, live
-write-based checks, live SSRF, Level 2, and hosted/public reports are
-not started. A clean P3 result is `NOT_REPRODUCED`, never "secure."
+rate-limit observations are implemented with `--confirm`. Local Level 2 write confirmation is
+implemented in the sandbox. Opt-in response header observations are implemented for local and
+live scans. IDOR discovery, provider database/open-rule checks, live write-based checks, live
+SSRF, live Level 2, and hosted/public reports are not started. A clean P3 result is
+`NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -154,8 +155,9 @@ target; the token is the authorization.
   `--endpoint` paths; same verdict rules as a local scan.
 - Results are signed and reportable with `--report`; `--headers` adds an unsigned observation.
 - A missing, invalid, or wrong-target token exits 2 before any request.
-- Live SSRF, write-based checks, and level 2 are not implemented; live rate-limit is a
-  bounded observation at level 1 with `--confirm`.
+- Live SSRF and live write-based checks are not implemented; local Level 2 write
+  confirmation requires the sandbox. Live rate-limit is a bounded observation at level 1
+  with `--confirm`.
 
 Live GETs are not zero-risk: a GET can trigger a webhook or cache. The user owns the target,
 and Pry keeps the request count minimal.
@@ -204,6 +206,35 @@ results, proofs, reports, logs, or errors.
 No discovery and no non-configured sweep. The result is about the declared object pair, not a
 global IDOR conclusion.
 
+## Level 2 Write Confirmation (local)
+
+```bash
+chmod 600 write.json
+pry scan ./my-app --level 2 --confirm --write-config write.json
+```
+
+The config declares one write that should require auth and one read that proves it landed:
+
+```json
+{
+  "method": "POST",
+  "endpoint": "/api/items",
+  "body": "{\"name\": \"{{marker}}\"}",
+  "verify_endpoint": "/api/items",
+  "verify_contains": "{{marker}}"
+}
+```
+
+Pry replaces `{{marker}}` with a fresh `pry-<hex>`, sends the write with no credentials in
+the disposable sandbox, then GETs the verification path. `EXPOSED` only when the write is
+2xx and the verification read is 2xx and contains the marker; the signed proof carries both
+the write pair and the verification pair. A rejected write or an absent marker is
+`NOT_REPRODUCED`; a write 5xx or transport failure is `UNVERIFIED`.
+
+POST, PUT, and PATCH only; no DELETE, uploads, auth, or multi-step workflows. Local only:
+live writes are rejected, and a live URL with `--write-config` exits 2 before any request.
+The config is 0600, mounted read-only, and removed. Use test data, not real secrets.
+
 ## Response Header Observations
 
 ```bash
@@ -238,8 +269,8 @@ Pry sends the declared endpoint a callback URL with a per-run nonce, and the app
 - GET query parameter only; no POST/body/header injection.
 - The callback hit proves the app fetched an internal callback URL. It does **not** prove
   arbitrary external egress.
-- No live SSRF (needs a public callback), no Level 2/write checks.
-- Missing `--confirm`, level 2, SSRF flags at level 0, or a URL with SSRF flags → exit 2.
+- No live SSRF (needs a public callback); local Level 2 write confirmation is separate.
+- Missing `--confirm`, SSRF flags at level 0, or a URL with SSRF flags → exit 2.
 - The callback sidecar has no egress and no host port; it is removed with the sandbox.
 
 ## Rate-Limit Observation (Level 1, local and live)
@@ -314,7 +345,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation + local Level 2 write confirmation
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -370,6 +401,13 @@ pry scan ./my-app --level 1 --confirm \
 pry scan ./my-app --level 1 --confirm \
   --rate-limit-endpoint /login --rate-limit-count 10
 
+# Live rate-limit observation (hardening, max 5 GETs)
+pry scan https://example.com --token <token> --level 1 --confirm \
+  --rate-limit-endpoint /login --rate-limit-count 3
+
+# Local Level 2 write confirmation (sandbox only, config must be 0600)
+pry scan ./my-app --level 2 --confirm --write-config write.json
+
 # Response header observation (hardening, not a verdict)
 pry scan ./my-app --headers
 
@@ -400,8 +438,8 @@ Pry implements a strict ownership gate with:
    limits, and guaranteed cleanup.
 5. P3 local scans run read-only probes in an internal network with no egress; the sidecar
    redacts secret values and database rows before the host sees them.
-6. Every local or live read-only `EXPOSED` result is an Ed25519-signed bundle; `verify-proof`
-   checks the signature and fingerprint.
+6. Every local or live `EXPOSED` result is an Ed25519-signed bundle; `verify-proof` checks
+   the signature and fingerprint.
 7. Live scans require a P1 token, are GET-only, send no credentials, and make up to 12
    requests; a live rate-limit observation adds up to five; configured live/local IDOR adds
    the credentials from a 0600 file to its three requests only.
@@ -410,8 +448,8 @@ Pry implements a strict ownership gate with:
 8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is
    the only EXPOSED condition. The rate-limit probe and header check are hardening
    observations, not verdicts. Live rate-limit is capped at five GETs, spaced 0.5s, and
-   stops on the first throttle. Live SSRF, Level 2, and write-based checks are not
-   implemented.
+   stops on the first throttle. Local Level 2 writes run only against the disposable sandbox
+   with a verified marker; live writes and live SSRF are not implemented.
 9. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence. The
    report shows hardening observations separately from verdicts.
 10. Absence of a reproduced finding is never reported as "secure".

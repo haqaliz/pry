@@ -51,9 +51,13 @@
 - The served-database check is four fixed GETs for conventional database paths. A SQLite
   header or SQL-dump signature is `EXPOSED`, but only a short signature excerpt is stored;
   rows and binary content are never kept. A clean result says nothing about other paths.
-- Level 2 is write-based confirmation. It runs only against a sandbox or staging copy by
-  default. Against a live target it needs an additional explicit confirmation beyond the
-  standard warning.
+- Level 2 is write-based confirmation. The implemented slice is local-sandbox only: one
+  declared write, a unique marker, and a verification read. The config is 0600, mounted
+  read-only, and removed. A live URL with `--write-config` exits 2 before any request; live
+  writes are not implemented. Against a live staging copy, a future live write would need an
+  additional explicit confirmation beyond the standard warning.
+- Use test data in a declared write body, not real secrets or personal data. POST, PUT, and
+  PATCH only; no DELETE, uploads, or notification-triggering writes.
 - Stop immediately if a check appears to touch shared data, trigger a real notification, or
   alter state. Report it as UNVERIFIED rather than continuing.
 
@@ -63,10 +67,10 @@
 - GET only; no `Authorization`/`Cookie`; no writes; up to 12 requests, plus one for
   `--headers`, one per `--endpoint`, three for configured IDOR, and up to five for a live
   rate-limit observation.
-- Not a load test: live SSRF, Level 2, and write-based checks are not implemented. Local Level
-  1 SSRF and the bounded local/live rate-limit observations are separate and require
-  `--confirm`; the live rate-limit sample is capped at five GETs and stops on the first
-  throttle.
+- Not a load test: live SSRF, live Level 2, and live write-based checks are not implemented.
+  Local Level 1 SSRF, the bounded local/live rate-limit observations, and local Level 2 write
+  confirmation are separate and require `--confirm`; the live rate-limit sample is capped at
+  five GETs and stops on the first throttle.
 - The P1 token is the owner's authorization. If the target is shared or production, the owner
   must confirm they control it.
 - Configured live and local IDOR credentials come from a 0600 file, are used only for the three
