@@ -468,6 +468,38 @@ def test_main_rejects_missing_arguments(capsys):
     assert "usage" in captured.err.lower()
 
 
+def test_database_is_a_sidecar_probe():
+    assert sidecar.PROBES["database"] is sidecar.probe_database
+
+
+def test_main_accepts_database(capsys):
+    fetch = FakeFetch(
+        _response(200, body="SQLite format 3\x00rest", path="/data.db")
+    )
+
+    code = sidecar.main(["database", BASE], fetch=fetch)
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert captured.err == ""
+    assert captured.out.count("\n") == 1
+    payload = json.loads(captured.out)
+    assert payload["probe"] == "database"
+    assert payload["verdict"] == sidecar.EXPOSED
+    assert fetch.calls[0][1] == BASE + "/data.db"
+
+
+def test_main_rejects_database_with_the_wrong_argument_count(capsys):
+    for argv in (["database"], ["database", BASE, "/extra"]):
+        code = sidecar.main(argv, fetch=FakeFetch())
+        captured = capsys.readouterr()
+
+        assert code == 2
+        assert captured.out == ""
+        assert "usage" in captured.err.lower()
+        assert "database" in captured.err
+
+
 def test_sidecar_is_standard_library_only():
     source = Path(sidecar.__file__).read_text(encoding="utf-8")
     tree = ast.parse(source)

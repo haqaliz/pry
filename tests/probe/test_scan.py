@@ -282,6 +282,7 @@ def test_scan_starts_the_sidecar_on_the_network_and_runs_every_probe(
         ["python", "/pry/sidecar.py", "cors", BASE],
         ["python", "/pry/sidecar.py", "errors", BASE],
         ["python", "/pry/sidecar.py", "secrets", BASE],
+        ["python", "/pry/sidecar.py", "database", BASE],
     ]
     assert all(call[1] == SIDECAR for call in exec_calls)
     assert all(call[3] == 20 for call in exec_calls)
@@ -291,6 +292,7 @@ def test_scan_starts_the_sidecar_on_the_network_and_runs_every_probe(
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
 
 
@@ -315,9 +317,10 @@ def test_scan_returns_the_snapshot_results_and_summary(repo, tmp_path, monkeypat
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert all(isinstance(result, ProbeResult) for result in outcome.results)
-    assert outcome.summary == {EXPOSED: 1, NOT_REPRODUCED: 1, UNVERIFIED: 1}
+    assert outcome.summary == {EXPOSED: 1, NOT_REPRODUCED: 2, UNVERIFIED: 1}
     assert outcome.summary == summarize(outcome.results)
 
 
@@ -356,8 +359,9 @@ def test_scan_writes_results_json_beside_the_snapshot(repo, tmp_path, monkeypatc
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
-    assert data["summary"] == {EXPOSED: 2, NOT_REPRODUCED: 1, UNVERIFIED: 0}
+    assert data["summary"] == {EXPOSED: 2, NOT_REPRODUCED: 2, UNVERIFIED: 0}
     assert data["created_at"].endswith("Z")
     for entry in data["results"]:
         assert set(entry) == {
@@ -391,14 +395,16 @@ def test_scan_records_a_failed_probe_as_unverified_and_continues(
         EXPOSED,
         UNVERIFIED,
         NOT_REPRODUCED,
+        NOT_REPRODUCED,
     ]
     assert outcome.results[1].cause == "EXEC_FAILED"
-    assert outcome.summary == {EXPOSED: 1, NOT_REPRODUCED: 1, UNVERIFIED: 1}
+    assert outcome.summary == {EXPOSED: 1, NOT_REPRODUCED: 2, UNVERIFIED: 1}
     assert outcome.results_path.exists()
     assert [call[2][2] for call in docker.calls if call[0] == "exec"] == [
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert docker.sidecars == []
     assert docker.networks == []
@@ -500,6 +506,7 @@ def test_scan_runs_one_unauth_probe_per_declared_endpoint(
         ["python", "/pry/sidecar.py", "cors", BASE],
         ["python", "/pry/sidecar.py", "errors", BASE],
         ["python", "/pry/sidecar.py", "secrets", BASE],
+        ["python", "/pry/sidecar.py", "database", BASE],
         ["python", "/pry/sidecar.py", "unauth", BASE, "/api/users"],
         ["python", "/pry/sidecar.py", "unauth", BASE, "/api/admin"],
     ]
@@ -507,10 +514,12 @@ def test_scan_runs_one_unauth_probe_per_declared_endpoint(
         "cors",
         "errors",
         "secrets",
+        "database",
         "unauth",
         "unauth",
     ]
     assert [result.verdict for result in outcome.results] == [
+        NOT_REPRODUCED,
         NOT_REPRODUCED,
         NOT_REPRODUCED,
         NOT_REPRODUCED,
@@ -519,7 +528,7 @@ def test_scan_runs_one_unauth_probe_per_declared_endpoint(
     ]
     assert outcome.summary == {
         EXPOSED: 2,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
     data = json.loads(outcome.results_path.read_text())
@@ -527,15 +536,16 @@ def test_scan_runs_one_unauth_probe_per_declared_endpoint(
         "cors",
         "errors",
         "secrets",
+        "database",
         "unauth",
         "unauth",
     ]
-    assert data["summary"] == {EXPOSED: 2, NOT_REPRODUCED: 3, UNVERIFIED: 0}
+    assert data["summary"] == {EXPOSED: 2, NOT_REPRODUCED: 4, UNVERIFIED: 0}
     assert docker.sidecars == []
     assert docker.networks == []
 
 
-def test_scan_without_declared_endpoints_runs_exactly_three_probes(
+def test_scan_without_declared_endpoints_runs_exactly_the_floor_probes(
     repo, tmp_path, monkeypatch
 ):
     docker = FakeDocker()
@@ -545,11 +555,12 @@ def test_scan_without_declared_endpoints_runs_exactly_three_probes(
     outcome = scan.scan_local(repo, out=tmp_path / "run", docker=docker)
 
     exec_calls = [call for call in docker.calls if call[0] == "exec"]
-    assert len(exec_calls) == 3
+    assert len(exec_calls) == 4
     assert [result.probe for result in outcome.results] == [
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
 
 
@@ -678,7 +689,7 @@ def test_scan_writes_no_bundle_without_exposed_findings(
         {"cors": NOT_REPRODUCED, "errors": UNVERIFIED, "secrets": NOT_REPRODUCED},
     )
 
-    assert [result.proof for result in outcome.results] == [None, None, None]
+    assert [result.proof for result in outcome.results] == [None] * 4
     assert not (tmp_path / "run" / "proofs").exists()
     assert not proof_key.exists()
 
@@ -719,11 +730,13 @@ def test_scan_appends_one_corpus_record_per_finding(
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert [record["verdict"] for record in records] == [
         EXPOSED,
         NOT_REPRODUCED,
         EXPOSED,
+        NOT_REPRODUCED,
     ]
     for record in records:
         assert set(record) == {
@@ -777,10 +790,10 @@ def test_a_corpus_failure_warns_without_failing_the_scan(
         "REPORT_FAILED: cannot append corpus: denied"
     )
     assert outcome.results_path.exists()
-    assert len(outcome.results) == 3
+    assert len(outcome.results) == 4
     assert outcome.summary == {
         EXPOSED: 1,
-        NOT_REPRODUCED: 2,
+        NOT_REPRODUCED: 3,
         UNVERIFIED: 0,
     }
 
@@ -847,7 +860,7 @@ def test_scan_mounts_a_0600_temp_copy_of_the_idor_config(
     assert outcome.results[-1].probe == "idor"
     assert outcome.summary == {
         EXPOSED: 0,
-        NOT_REPRODUCED: 4,
+        NOT_REPRODUCED: 5,
         UNVERIFIED: 0,
     }
     assert not Path(docker.config_paths[0]).exists()
@@ -898,6 +911,7 @@ def test_scan_runs_idor_after_floor_unauth_ssrf_and_rate_limit(
         "cors",
         "errors",
         "secrets",
+        "database",
         "unauth",
         "ssrf",
         "rate_limit",
@@ -907,6 +921,7 @@ def test_scan_runs_idor_after_floor_unauth_ssrf_and_rate_limit(
         "cors",
         "errors",
         "secrets",
+        "database",
         "unauth",
         "ssrf",
         "idor",
@@ -996,9 +1011,11 @@ def test_scan_without_an_idor_config_mounts_nothing_and_runs_no_idor(
         ["python", "/pry/sidecar.py", "cors", BASE],
         ["python", "/pry/sidecar.py", "errors", BASE],
         ["python", "/pry/sidecar.py", "secrets", BASE],
+        ["python", "/pry/sidecar.py", "database", BASE],
     ]
     assert [result.probe for result in outcome.results] == [
         "cors",
         "errors",
         "secrets",
+        "database",
     ]

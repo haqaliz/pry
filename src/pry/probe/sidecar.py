@@ -72,6 +72,15 @@ SECRET_PATHS = (
     "/.aws/credentials",
     "/backup.sql",
 )
+DATABASE_PATHS = ("/data.db", "/app.db", "/db.sqlite", "/dump.sql")
+SQLITE_MAGIC = "SQLite format 3\x00"
+SQLITE_EXCERPT = "SQLite format 3\\x00 [binary database content withheld]"
+_SQL_DUMP_SIGNATURE = re.compile(
+    r"\A(?:[ \t\r\n]*--[^\n]*(?:\n|\Z)|[ \t\r\n])*"
+    r"(?P<keyword>PRAGMA|CREATE\s+TABLE|INSERT\s+INTO|BEGIN\s+TRANSACTION"
+    r"|DROP\s+TABLE)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -447,6 +456,74 @@ def probe_secrets(base_url: str, fetch=None) -> dict:
     )
 
 
+def _database_signature(body: str):
+    if body.startswith(SQLITE_MAGIC):
+        return "SQLite database header", SQLITE_EXCERPT
+    match = _SQL_DUMP_SIGNATURE.match(body)
+    if match is None:
+        return None
+    keyword = match.group("keyword")
+    return (
+        "SQL dump signature %s" % keyword,
+        "%s [SQL dump content withheld]" % keyword,
+    )
+
+
+def probe_database(base_url: str, fetch=None) -> dict:
+    fetch = fetch if fetch is not None else urllib_fetch
+    headers = {"User-Agent": USER_AGENT}
+    first_url = None
+    first_response = None
+    for path in DATABASE_PATHS:
+        url = base_url.rstrip("/") + path
+        try:
+            response = fetch("GET", url, headers)
+        except TransportError as exc:
+            return _transport_result("database", "GET", url, headers, exc)
+
+        matched = _database_signature(response.body or "")
+        if matched is not None:
+            # Withhold rows and binary content even when the response is not
+            # a same-origin 2xx match.
+            response = Response(
+                response.status,
+                response.headers,
+                matched[1],
+                response.final_url,
+            )
+        if first_response is None:
+            first_url, first_response = url, response
+
+        if not 200 <= response.status < 300:
+            continue
+        if not _same_origin(base_url, response.final_url):
+            continue
+        if matched is None:
+            continue
+        return _result(
+            "database",
+            EXPOSED,
+            None,
+            "%s at %s in a same-origin 200 response" % (matched[0], path),
+            "GET",
+            url,
+            headers,
+            response,
+        )
+
+    return _result(
+        "database",
+        NOT_REPRODUCED,
+        None,
+        "checked %d database paths; no SQLite/SQL dump signature found in a "
+        "same-origin 200 response" % len(DATABASE_PATHS),
+        "GET",
+        first_url,
+        headers,
+        first_response,
+    )
+
+
 def _is_endpoint_path(path) -> bool:
     if not isinstance(path, str) or not path or len(path) > ENDPOINT_LIMIT:
         return False
@@ -709,6 +786,7 @@ PROBES = {
     "cors": probe_cors,
     "errors": probe_errors,
     "secrets": probe_secrets,
+    "database": probe_database,
     "unauth": probe_unauth,
 }
 
@@ -909,7 +987,7 @@ def _read_idor_config(path):
 def main(argv=None, fetch=None, sleep=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     usage = (
-        "usage: sidecar.py {cors|errors|secrets|headers} BASE_URL | "
+        "usage: sidecar.py {cors|errors|secrets|database|headers} BASE_URL | "
         "sidecar.py unauth BASE_URL PATH | "
         "sidecar.py rate_limit BASE_URL PATH COUNT | "
         "sidecar.py idor BASE_URL CONFIG_PATH\n"

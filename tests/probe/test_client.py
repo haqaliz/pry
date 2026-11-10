@@ -163,21 +163,32 @@ def test_a_docker_exec_exception_is_unverified_and_does_not_escape():
     assert "docker exec exploded" in result.evidence
 
 
-def test_run_all_runs_cors_errors_and_secrets_in_order():
+def test_run_all_runs_every_floor_probe_in_order():
     fake = FakeDocker(
         [
             _json(_payload("cors")),
             _json(_payload("errors")),
             _json(_payload("secrets")),
+            _json(_payload("database")),
         ]
     )
 
     results = ProbeClient(fake, SIDECAR, BASE).run_all()
 
-    assert list(PROBE_ORDER) == ["cors", "errors", "secrets"]
-    assert [call[1][2] for call in fake.calls] == ["cors", "errors", "secrets"]
-    assert [result.probe for result in results] == ["cors", "errors", "secrets"]
-    assert len(fake.calls) == 3
+    assert list(PROBE_ORDER) == ["cors", "errors", "secrets", "database"]
+    assert [call[1][2] for call in fake.calls] == [
+        "cors",
+        "errors",
+        "secrets",
+        "database",
+    ]
+    assert [result.probe for result in results] == [
+        "cors",
+        "errors",
+        "secrets",
+        "database",
+    ]
+    assert len(fake.calls) == 4
 
 
 def test_run_unauth_appends_the_declared_path():

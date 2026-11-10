@@ -215,10 +215,11 @@ def test_scan_with_headers_appends_the_observation(repo, tmp_path, monkeypatch):
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert outcome.summary == {
         EXPOSED: 0,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
     assert [observation["probe"] for observation in outcome.observations] == [
@@ -258,7 +259,7 @@ def test_results_json_includes_the_header_observation(
     assert "proof" not in stored
     assert data["summary"] == {
         EXPOSED: 0,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
 
@@ -294,6 +295,7 @@ def test_a_headers_exec_failure_is_unverified_and_the_scan_continues(
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert outcome.results_path.exists()
 

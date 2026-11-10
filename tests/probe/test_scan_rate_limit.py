@@ -242,10 +242,11 @@ def test_scan_appends_the_observation_after_the_floor_checks(
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert outcome.summary == {
         EXPOSED: 0,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
     assert len(outcome.observations) == 1
@@ -281,7 +282,7 @@ def test_scan_records_a_throttled_observation(repo, tmp_path, monkeypatch):
     assert "request 4/10" in observation["evidence"]
     assert outcome.summary == {
         EXPOSED: 0,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
 
@@ -321,7 +322,7 @@ def test_results_json_includes_observations_beside_results(
     assert "proof" not in stored
     assert data["summary"] == {
         EXPOSED: 0,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
 
@@ -361,6 +362,7 @@ def test_a_rate_limit_exec_failure_is_unverified_and_the_scan_continues(
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert outcome.results_path.exists()
 
@@ -412,6 +414,7 @@ def test_ssrf_and_rate_limit_both_run_and_stay_separate(
         "cors",
         "errors",
         "secrets",
+        "database",
         "ssrf",
     ]
     assert outcome.results[-1].verdict == EXPOSED

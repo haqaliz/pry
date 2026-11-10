@@ -18,7 +18,7 @@ EXEC_TIMEOUT = "EXEC_TIMEOUT"
 INVALID_RESULT = "INVALID_RESULT"
 UNKNOWN_VERDICT = "UNKNOWN_VERDICT"
 RATE_LIMIT_TIMEOUT = 120
-PROBE_ORDER = ("cors", "errors", "secrets")
+PROBE_ORDER = ("cors", "errors", "secrets", "database")
 
 
 def _text(raw) -> str:

@@ -267,6 +267,7 @@ def test_ssrf_runs_after_the_floor_probes_and_appends_the_result(
         "cors",
         "errors",
         "secrets",
+        "database",
         "ssrf",
     ]
     result = outcome.results[-1]
@@ -276,7 +277,7 @@ def test_ssrf_runs_after_the_floor_probes_and_appends_the_result(
     assert "/" + command[5] in result.evidence
     assert outcome.summary == {
         EXPOSED: 1,
-        NOT_REPRODUCED: 3,
+        NOT_REPRODUCED: 4,
         UNVERIFIED: 0,
     }
 
@@ -320,6 +321,7 @@ def test_without_an_ssrf_config_no_callback_sidecar_starts(
         "cors",
         "errors",
         "secrets",
+        "database",
     ]
     assert not [
         call for call in docker.calls if call[0] == "start_callback_sidecar"
@@ -347,6 +349,7 @@ def test_an_app_request_failure_is_unverified_and_the_scan_continues(
         "cors",
         "errors",
         "secrets",
+        "database",
         "ssrf",
     ]
     assert outcome.results[-1].verdict == UNVERIFIED
