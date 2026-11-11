@@ -134,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--write-config",
         metavar="FILE",
-        help="0600 JSON config for a declared local level 2 write",
+        help="0600 JSON config for a declared level 2 write (local or live)",
     )
     scan.add_argument(
         "--ssrf-endpoint",
