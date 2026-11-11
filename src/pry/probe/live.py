@@ -32,6 +32,7 @@ from pry.probe.sidecar import (
     probe_rate_limit,
     probe_secrets,
     probe_unauth,
+    probe_write,
 )
 
 LIVE_PREFIX = "live-"
@@ -96,6 +97,7 @@ def scan_live(
     idor_config=None,
     headers=False,
     rate_limit_config=None,
+    write_config=None,
 ):
     """Prove ownership of ``url``, run the read-only probes, finalize."""
     target = normalize_target(url)
@@ -125,6 +127,22 @@ def scan_live(
                 rate_limit_config.endpoint,
                 rate_limit_config.count,
                 spacing=LIVE_RATE_LIMIT_SPACING,
+            )
+        )
+    if write_config is not None:
+        results.append(
+            ProbeResult(
+                **probe_write(
+                    target.origin,
+                    {
+                        "method": write_config.method,
+                        "endpoint": write_config.endpoint,
+                        "body": write_config.body,
+                        "verify_endpoint": write_config.verify_endpoint,
+                        "verify_contains": write_config.verify_contains,
+                        "content_type": write_config.content_type,
+                    },
+                )
             )
         )
     results, summary, results_path, corpus_error = finalize_results(

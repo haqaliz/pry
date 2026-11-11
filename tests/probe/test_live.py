@@ -28,6 +28,7 @@ from pry.probe.results import (
     summarize,
 )
 from pry.probe.scan import ScanOutcome
+from pry.probe.write import WriteConfig
 from pry.proof import load_bundle, verify_bundle
 from pry.report import write_report
 from pry.report.corpus import read_findings
@@ -106,6 +107,7 @@ def sentinel(monkeypatch):
         "probe_unauth",
         "probe_idor",
         "probe_rate_limit",
+        "probe_write",
     ):
         monkeypatch.setattr(live, name, guard)
     return guard
@@ -569,3 +571,140 @@ def test_scan_live_validates_the_token_before_the_rate_limit_probe(
         )
 
     assert sentinel.calls == []
+
+
+def _write_payload(base_url):
+    return {
+        "probe": "write",
+        "verdict": EXPOSED,
+        "cause": None,
+        "evidence": "POST /api/write returned status 201; verification GET "
+        "/api/write returned status 200 and contains the generated marker",
+        "request": {
+            "method": "POST",
+            "url": base_url + "/api/write",
+            "headers": {
+                "user-agent": "pry/0.1",
+                "content-type": "application/json",
+            },
+        },
+        "response": {
+            "status": 201,
+            "headers": {"content-type": "application/json"},
+            "body": '{"created":true}',
+            "verification": {
+                "request": {
+                    "method": "GET",
+                    "url": base_url + "/api/write",
+                    "headers": {"user-agent": "pry/0.1"},
+                },
+                "response": {
+                    "status": 200,
+                    "headers": {"content-type": "application/json"},
+                    "body": '{"name":"pry-abc123"}',
+                },
+            },
+        },
+    }
+
+
+def _write_config():
+    return WriteConfig(
+        method="POST",
+        endpoint="/api/write",
+        body='{"name":"{{marker}}"}',
+        verify_endpoint="/api/write",
+        verify_contains="{{marker}}",
+    )
+
+
+def test_scan_live_runs_a_declared_write_only_with_a_config(
+    tmp_path, fake_probes, monkeypatch
+):
+    calls = []
+
+    def write_probe(base_url, config):
+        calls.append((base_url, config))
+        return _write_payload(base_url)
+
+    monkeypatch.setattr(live, "probe_write", write_probe, raising=False)
+
+    outcome = live.scan_live(
+        ORIGIN,
+        _token(),
+        out=tmp_path / "run",
+        write_config=_write_config(),
+    )
+
+    assert len(calls) == 1
+    assert calls[0][0] == ORIGIN
+    assert calls[0][1]["method"] == "POST"
+    assert calls[0][1]["endpoint"] == "/api/write"
+    assert calls[0][1]["body"] == '{"name":"{{marker}}"}'
+    assert [result.probe for result in outcome.results] == list(PROBES) + [
+        "write"
+    ]
+    write = outcome.results[-1]
+    assert write.verdict == EXPOSED
+    assert write.proof is not None
+    payload, fingerprint = verify_bundle(load_bundle(write.proof))
+    assert payload["finding"]["probe"] == "write"
+    assert (
+        payload["finding"]["response"]["verification"]["response"]["status"]
+        == 200
+    )
+    assert fingerprint.startswith("sha256:")
+
+
+def test_scan_live_without_a_write_config_does_not_run_it(
+    tmp_path, fake_probes, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        live,
+        "probe_write",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+        raising=False,
+    )
+
+    outcome = live.scan_live(ORIGIN, _token(), out=tmp_path / "run")
+
+    assert calls == []
+    assert [result.probe for result in outcome.results] == list(PROBES)
+
+
+def test_scan_live_validates_the_token_before_the_write_probe(
+    tmp_path, sentinel
+):
+    with pytest.raises(OwnershipError):
+        live.scan_live(
+            ORIGIN,
+            "garbage",
+            out=tmp_path / "run",
+            write_config=_write_config(),
+        )
+
+    assert sentinel.calls == []
+
+
+def test_scan_live_signs_a_not_reproduced_write_without_a_proof(
+    tmp_path, fake_probes, monkeypatch
+):
+    payload = _write_payload(ORIGIN)
+    payload["verdict"] = NOT_REPRODUCED
+    payload["evidence"] = "write POST /api/write returned status 403"
+    payload["response"] = {"status": 403, "headers": {}, "body": "denied"}
+    monkeypatch.setattr(
+        live, "probe_write", lambda base_url, config: payload, raising=False
+    )
+
+    outcome = live.scan_live(
+        ORIGIN,
+        _token(),
+        out=tmp_path / "run",
+        write_config=_write_config(),
+    )
+
+    write = outcome.results[-1]
+    assert write.verdict == NOT_REPRODUCED
+    assert write.proof is None

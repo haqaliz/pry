@@ -49,6 +49,8 @@ LEVEL1_REQUIRES_LOCAL = "LEVEL1_REQUIRES_LOCAL"
 WRITE_CONFIG_REQUIRED = "WRITE_CONFIG_REQUIRED"
 WRITE_REQUIRES_LEVEL2 = "WRITE_REQUIRES_LEVEL2"
 WRITE_REQUIRES_LOCAL = "WRITE_REQUIRES_LOCAL"
+LIVE_WRITE_CONFIRMATION_REQUIRED = "LIVE_WRITE_CONFIRMATION_REQUIRED"
+LIVE_WRITE_CONFIRMATION_UNEXPECTED = "LIVE_WRITE_CONFIRMATION_UNEXPECTED"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -85,13 +87,19 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[0, 1, 2],
         help=(
             "Intensity level (0 floor, 1 local SSRF/rate-limit and live "
-            "rate-limit; 2 local write confirmation)"
+            "rate-limit; 2 local/live write confirmation)"
         ),
     )
     scan.add_argument(
         "--confirm",
         action="store_true",
         help="Explicit confirmation for level 1 or level 2 expanded checks",
+    )
+    scan.add_argument(
+        "--confirm-live-write",
+        action="store_true",
+        help="Extra confirmation for a live level 2 write; it can alter "
+        "real data",
     )
     scan.add_argument("--json", action="store_true", help="Print JSON")
     scan.add_argument(
@@ -550,23 +558,7 @@ def _scan_target_path(args) -> int:
 
 
 def _scan_target_url(args) -> int:
-    if args.write_config is not None:
-        _print_error(
-            ProbeError(
-                WRITE_REQUIRES_LOCAL,
-                "write confirmation is local-only; live writes are not "
-                "implemented",
-            ),
-            args.json,
-        )
-        return 2
-    if args.level == 2:
-        _print_error(
-            OwnershipError(INTENSITY_INSUFFICIENT, "level 2 is not implemented"),
-            args.json,
-        )
-        return 2
-
+    has_write = args.write_config is not None
     has_ssrf_flags = (
         args.ssrf_endpoint is not None or args.ssrf_parameter is not None
     )
@@ -574,11 +566,49 @@ def _scan_target_url(args) -> int:
         args.rate_limit_endpoint is not None
         or args.rate_limit_count is not None
     )
-    if args.level == 1 and not args.confirm:
+
+    if args.level == 2 and not has_write:
+        _print_error(
+            ProbeError(
+                WRITE_CONFIG_REQUIRED,
+                "level 2 requires --write-config",
+            ),
+            args.json,
+        )
+        return 2
+    if args.level < 2 and has_write:
+        _print_error(
+            ProbeError(
+                WRITE_REQUIRES_LEVEL2,
+                "write confirmation requires --level 2",
+            ),
+            args.json,
+        )
+        return 2
+    if args.level > 0 and not args.confirm:
         _print_error(
             ProbeError(
                 CONFIRMATION_REQUIRED,
-                "level 1 is expanded read-only work and requires --confirm",
+                "level %d requires --confirm" % args.level,
+            ),
+            args.json,
+        )
+        return 2
+    if has_write and not args.confirm_live_write:
+        _print_error(
+            ProbeError(
+                LIVE_WRITE_CONFIRMATION_REQUIRED,
+                "live writes can alter real data; add --confirm-live-write "
+                "only after reading the warning and preferring a staging copy",
+            ),
+            args.json,
+        )
+        return 2
+    if args.confirm_live_write and not has_write:
+        _print_error(
+            ProbeError(
+                LIVE_WRITE_CONFIRMATION_UNEXPECTED,
+                "--confirm-live-write requires --level 2 --write-config",
             ),
             args.json,
         )
@@ -586,7 +616,7 @@ def _scan_target_url(args) -> int:
     if has_ssrf_flags:
         cause = (
             SSRF_REQUIRES_LOCAL
-            if args.level == 1
+            if args.level >= 1
             else SSRF_REQUIRES_LEVEL1
         )
         _print_error(
@@ -600,21 +630,21 @@ def _scan_target_url(args) -> int:
         return 2
 
     rate_limit_config = None
-    if args.level == 1:
-        if args.rate_limit_count is not None and args.rate_limit_endpoint is None:
+    if has_rate_limit_flags:
+        if args.level < 1:
             _print_error(
                 ProbeError(
-                    RATE_LIMIT_CONFIG_REQUIRED,
-                    "level 1 rate-limit checks require --rate-limit-endpoint",
+                    RATE_LIMIT_REQUIRES_LEVEL1,
+                    "rate-limit observations require --level 1 and --confirm",
                 ),
                 args.json,
             )
             return 2
-        if args.rate_limit_endpoint is None:
+        if args.rate_limit_count is not None and args.rate_limit_endpoint is None:
             _print_error(
                 ProbeError(
-                    LEVEL1_CHECK_REQUIRED,
-                    "live level 1 requires --rate-limit-endpoint",
+                    RATE_LIMIT_CONFIG_REQUIRED,
+                    "rate-limit checks require --rate-limit-endpoint",
                 ),
                 args.json,
             )
@@ -630,11 +660,11 @@ def _scan_target_url(args) -> int:
         except ProbeError as exc:
             _print_error(exc, args.json)
             return 2
-    elif has_rate_limit_flags:
+    elif args.level == 1:
         _print_error(
             ProbeError(
-                RATE_LIMIT_REQUIRES_LEVEL1,
-                "rate-limit observations require --level 1 and --confirm",
+                LEVEL1_CHECK_REQUIRED,
+                "live level 1 requires --rate-limit-endpoint",
             ),
             args.json,
         )
@@ -647,6 +677,9 @@ def _scan_target_url(args) -> int:
         endpoints = validate_endpoints(args.endpoint)
         idor_config = (
             load_idor_config(args.idor_config) if args.idor_config else None
+        )
+        write_config = (
+            load_write_config(args.write_config) if has_write else None
         )
     except (OwnershipError, ProbeError) as exc:
         _print_error(exc, args.json)
@@ -661,6 +694,8 @@ def _scan_target_url(args) -> int:
         live_kwargs["headers"] = True
     if rate_limit_config is not None:
         live_kwargs["rate_limit_config"] = rate_limit_config
+    if write_config is not None:
+        live_kwargs["write_config"] = write_config
     try:
         outcome = scan_live(args.target, token, **live_kwargs)
     except (OwnershipError, IntakeError, ProbeError, ProofError) as exc:

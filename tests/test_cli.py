@@ -174,7 +174,7 @@ def test_scan_valid_token_calls_scan_live(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "level,cause",
     [
-        ("2", "INTENSITY_INSUFFICIENT"),
+        ("2", "WRITE_CONFIG_REQUIRED"),
     ],
 )
 def test_scan_rejects_higher_intensity(level, cause, monkeypatch, capsys):

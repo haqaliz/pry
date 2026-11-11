@@ -336,7 +336,7 @@ def test_a_missing_write_config_never_scans(repo, tmp_path, monkeypatch, capsys)
 
 
 @pytest.mark.parametrize("mode", [0o600, 0o644])
-def test_a_url_with_a_write_config_is_refused_before_any_request(
+def test_a_url_with_a_write_config_without_level2_is_refused(
     tmp_path, monkeypatch, capsys, mode
 ):
     path = _write_config_file(tmp_path, mode=mode)
@@ -348,7 +348,7 @@ def test_a_url_with_a_write_config_is_refused_before_any_request(
     )
 
     assert code == 2
-    assert "WRITE_REQUIRES_LOCAL" in out
+    assert "WRITE_REQUIRES_LEVEL2" in out
     assert local.calls == []
     assert live.calls == []
     assert str(path) not in out
