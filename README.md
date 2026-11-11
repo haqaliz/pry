@@ -15,12 +15,12 @@ the data it should not have returned.
 P1 ownership gate implemented. P2 local intake implemented. P3 read-only floor probes
 implemented (first slice + missing-auth declarations): CORS with credentials, verbose error
 leakage, exposed secret files, served database files, and declared-protected endpoints that
-return 200 JSON with no credentials. P5 read-only signed proof bundles implemented for local
-and live read-only EXPOSED findings. P6 local findings report and corpus implemented. Live
-read-only scans and configured live IDOR checks are implemented for URLs with a P1 token;
-configured local IDOR runs in the sandbox. Local Level 1 SSRF and bounded local/live
-rate-limit observations are implemented with `--confirm`. Local and live Level 2 write
-confirmation is implemented (live needs an extra confirmation). Opt-in response header
+return 200 JSON with no credentials. P5 read-only signed proof bundles and live read-only
+replay implemented for local and live read-only EXPOSED findings. P6 local findings report and
+corpus implemented. Live read-only scans and configured live IDOR checks are implemented for
+URLs with a P1 token; configured local IDOR runs in the sandbox. Local Level 1 SSRF and bounded
+local/live rate-limit observations are implemented with `--confirm`. Local and live Level 2
+write confirmation is implemented (live needs an extra confirmation). Opt-in response header
 observations are implemented for local and live scans. IDOR discovery, provider
 database/open-rule checks, live SSRF, and hosted/public reports are not started. A clean P3
 result is `NOT_REPRODUCED`, never "secure."
@@ -324,10 +324,25 @@ pry verify-proof <bundle> --fingerprint sha256:<your-key-fingerprint>
 `~/.pry/proof.key` (0600, `PRY_PROOF_KEY` override). `NOT_REPRODUCED` and `UNVERIFIED` are not
 signed.
 
+### Live Replay
+
+```bash
+pry replay ~/.pry/runs/<id>/proofs/<bundle_id>.json --token <token>
+```
+
+Replay verifies the bundle and the P1 token, then re-sends the recorded **GET** with no
+credentials and no redirects. It prints `MATCH` when the replay status equals the recorded
+status, `MISMATCH` when it differs, and `UNVERIFIED` on transport. Exit codes: 0 match,
+1 mismatch, 2 invalid/unverified.
+
+Replay is a **status-only reproducibility check**, not a new verdict or proof. It does not
+re-evaluate the probe-specific condition, does not sign anything, and only sends
+`User-Agent`/`Accept` from the recorded headers. Local and write proofs are refused; key
+distribution remains future work.
+
 The signature proves the captured pair was not altered after signing, and that the signer
 held the private key. It does **not** prove the app is secure, and a bundle with an embedded
 key is not provenance on its own: pin the fingerprint out-of-band to trust a specific signer.
-Live replay and key distribution are future work.
 
 ## Findings Report and Corpus (P6 read-only slice)
 
@@ -427,6 +442,9 @@ pry scan ./my-app --headers
 
 # Verify a signed proof bundle
 pry verify-proof ~/.pry/runs/<id>/proofs/<bundle_id>.json
+
+# Replay a read-only proof against the P1-verified live target
+pry replay ~/.pry/runs/<id>/proofs/<bundle_id>.json --token <token>
 
 # Generate a local HTML report
 pry scan ./my-app --report

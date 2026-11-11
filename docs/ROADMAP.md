@@ -41,7 +41,8 @@ Opt-in header observations report missing/present recommended headers as an unsi
 observation. Endpoint discovery, IDOR discovery, and provider database/open-rule checks are
 not. M1.3 local and live read-only `pry scan` works; levels 1–2 are implemented local and
 live (live writes need extra confirmation). M1.2 is done for local and live findings — every
-`EXPOSED` writes an Ed25519-signed bundle; live replay remains P5. M1.4 is not started.
+`EXPOSED` writes an Ed25519-signed bundle; live read-only replay is implemented, while
+local/write replay and key distribution remain. M1.4 is not started.
 
 ## Phase 2: Intensity levels and live targets (weeks 8-12)
 

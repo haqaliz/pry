@@ -73,6 +73,9 @@
   sample is capped at five GETs and stops on the first throttle.
 - The P1 token is the owner's authorization. If the target is shared or production, the owner
   must confirm they control it.
+- `pry replay` re-sends one recorded read-only GET after a fresh P1 check. It sends no
+  auth/cookie/API-key headers, follows no redirects, and compares statuses only; it is a
+  reproducibility check, not a new verdict or proof.
 - Configured live and local IDOR credentials come from a 0600 file, are used only for the three
   requests, and are redacted from stored results, proofs, reports, logs, and errors. The local
   config is mounted read-only into the sandbox and removed afterward. No discovery in this

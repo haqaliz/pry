@@ -3,7 +3,8 @@
 Engine capabilities in build order. Each lands test-first. P1 ownership gate implemented;
 P2 local intake implemented; P3 read-only probe slice implemented (including declared
 unauthenticated endpoints, opt-in header observations, and served database file checks);
-P5 read-only signed bundles implemented for local and live read-only findings; P6 local
+P5 read-only signed bundles and live read-only replay implemented for local and live
+read-only findings; P6 local
 report/corpus implemented; live read-only scans implemented; configured live IDOR implemented;
 local IDOR implemented; local Level 1 SSRF and local/live rate-limit observations
 implemented; local and live Level 2 write confirmation implemented (live needs an extra
@@ -16,7 +17,7 @@ P5 onward are not.
 | **P2** | **Target intake.** Local repo booted in an isolated Docker sandbox (static + npm Node/Next first); records a pinned snapshot. Live read-only scans implemented; live write/recorded intake deferred. | P1 | Sandbox before live |
 | **P3** | **Floor probe suite (read-only, always on).** First slice: CORS with credentials, verbose error leakage, exposed secret files, served database files, declared unauthenticated endpoints; live read-only and configured live/local IDOR via a P1 token; opt-in header observations. Endpoint discovery, IDOR discovery, provider database/open-rule checks, and header policy analysis deferred. | P1, P2 | Constraint 2, read-only default |
 | **P4** | **Intensity-gated probe suite.** Level 1: non-mutating SSRF probes, rate-limit probing. Level 2: write-based confirmation, sandbox/staging only by default, extra confirmation for a live target. Local SSRF, local/live rate-limit observation, and local/live Level 2 write confirmation implemented (live writes need extra confirmation); live SSRF deferred. | P3 | Constraints 2 and 6 |
-| **P5** | **Exploit proof capture and verdict.** `EXPOSED` / `NOT_REPRODUCED` / `UNVERIFIED`, each backed by a signed, redacted request/response record. Read-only local and live slice implemented with Ed25519 bundles; live replay and P4 integration deferred. | P3, P4 | Constraints 3, 4, 5 — the moat |
+| **P5** | **Exploit proof capture and verdict.** `EXPOSED` / `NOT_REPRODUCED` / `UNVERIFIED`, each backed by a signed, redacted request/response record. Read-only local and live slice implemented with Ed25519 bundles; live read-only replay implemented; local/write replay and key distribution deferred. | P3, P4 | Constraints 3, 4, 5 — the moat |
 | **P6** | **Findings corpus and report.** Bank (target, probe, verdict, proof); generate a shareable report for the app owner. Read-only local and live report/corpus implemented; hosted/public reports deferred. | P5 | Measured, not guessed |
 | **P7** | **Platform integration (deferred).** Pre-publish check pluggable into Lovable/Replit/Base44-style platforms. | P3-P6 | Needs partnerships; not scheduled |
 
@@ -26,9 +27,9 @@ P1 is hardened before any other code runs against a real target — not merely b
 gating everything downstream. P2 local intake, the P3 read-only probe slice (including
 declared unauthenticated endpoints, header observations, and served database files), P5
 read-only signed bundles, P6 local/live report/corpus, live read-only scans, configured
-live/local IDOR, local Level 1 SSRF, the local/live rate-limit observations, and local/live
-Level 2 write confirmation are implemented; the remaining P3 discovery/provider checks and
-live SSRF follow behind explicit consent.
+live/local IDOR, local Level 1 SSRF, the local/live rate-limit observations, local/live
+Level 2 write confirmation, and live read-only proof replay are implemented; the remaining
+P3 discovery/provider checks and live SSRF follow behind explicit consent.
 P5 is the moat. P6 makes results publishable and reportable. P7 is business development, deferred.
 
 ## Open questions

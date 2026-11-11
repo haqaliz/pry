@@ -362,3 +362,32 @@ def test_architecture_level2_write_status():
 def test_roadmap_level2_write_status():
     text = " ".join(_read("docs/ROADMAP.md").split())
     assert "Level 2 write confirmation implemented local and live" in text
+
+
+def test_readme_live_replay_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Live Replay" in text
+    assert "pry replay" in text
+    assert "status-only" in text
+    assert "MATCH" in text
+    assert "Local and write proofs are refused" in text
+
+
+def test_claude_live_replay_status():
+    text = " ".join(_read("CLAUDE.md").split()).lower()
+    assert "live read-only replay" in text
+
+
+def test_capability_roadmap_live_replay_status():
+    text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split()).lower()
+    assert "live read-only replay implemented" in text
+
+
+def test_architecture_live_replay_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
+    assert "live replay is status-only" in text
+
+
+def test_roadmap_live_replay_status():
+    text = " ".join(_read("docs/ROADMAP.md").split()).lower()
+    assert "live read-only replay is implemented" in text

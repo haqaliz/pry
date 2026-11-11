@@ -1,8 +1,9 @@
 # Pry: Architecture
 
 Design intent, not built behavior. P1 is implemented; P2 local intake is implemented; P3
-read-only probes are implemented; P5 read-only signed bundles are implemented for local and
-live read-only findings; P6 local report/corpus are implemented; live read-only scans and
+read-only probes are implemented; P5 read-only signed bundles and live read-only replay are
+implemented for local and live read-only findings; P6 local report/corpus are implemented;
+live read-only scans and
 configured live IDOR and configured local IDOR are implemented; local Level 1 SSRF and a
 bounded local rate-limit observation and a bounded live rate-limit observation are
 implemented; opt-in response header observations and served database file checks are
@@ -41,9 +42,9 @@ src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
   probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + local/live rate-limit observation + local/live Level 2 write confirmation
-  proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
+  proof/      P5: Ed25519 signed bundles for local/live findings + live read-only replay
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
-  cli/        pry scan | verify-ownership | intake | verify-proof | report
+  cli/        pry scan | verify-ownership | intake | verify-proof | replay | report
 tests/        offline; fixture apps under local sandbox control; no real third-party targets
 ```
 
@@ -98,14 +99,19 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
   the standard warning.
 - **Proof capture is minimal and redacted.** Only the bytes needed to demonstrate the finding are
   retained; anything beyond that is truncated or redacted before storage.
+- **Live replay is status-only.** `pry replay` verifies the bundle and a fresh P1 token,
+  re-sends the recorded GET with no auth/cookie headers and no redirects, and compares the
+  replay status with the recorded status. It does not re-evaluate the probe or sign a new
+  proof; local and write proofs are refused.
 - **Findings are signed.** Every `EXPOSED` finding gets an Ed25519
   bundle over the target snapshot and the redacted pair. The embedded key is tamper-evidence;
   fingerprint pinning is the trust anchor. The signature is not a security verdict.
 - **The report is a local view, not signed evidence.** It renders the run's snapshot/results,
   verifies each proof, and escapes every dynamic value. It works for local and live read-only
   runs. The signed bundles remain the evidence; no upload by default.
-- **Determinism and replay.** Local findings get signed bundles; live replay and independent
-  key distribution are future P5 work.
+- **Determinism and replay.** Every finding gets a signed bundle; `pry replay` re-sends a
+  read-only live GET and compares statuses. Local/write replay and independent key
+  distribution remain future P5 work.
 - **UNVERIFIED causes** (draft): `OWNERSHIP_UNVERIFIED`, `TARGET_UNREACHABLE`,
   `INTENSITY_INSUFFICIENT`, `SANDBOX_BOOT_FAILED`, `PROBE_INCONCLUSIVE`.
 
