@@ -1,6 +1,7 @@
 # PRD — Provider Database Rules with Marker Ownership (P3 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Provider database/open-rule checks implemented
+  with a user-placed marker; IDOR discovery, live SSRF, and hosted reports are deferred.
 - **Owner:** aliz
 - **Slug:** `provider-db`
 - **Capability:** P3 — Firebase RTDB / Supabase REST open-rule checks

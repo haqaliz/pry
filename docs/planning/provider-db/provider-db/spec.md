@@ -3,7 +3,7 @@
 - **Feature:** `provider-db`
 - **Aspect:** `provider-db`
 - **PRD:** `../prd.md`
-- **Status:** Approved (2026-11-11)
+- **Status:** Implemented and merged (2026-11-11)
 
 ## Problem slice
 
