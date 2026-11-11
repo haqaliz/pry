@@ -1,6 +1,7 @@
 # PRD — Live SSRF with a User Callback (P4 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Live Level 1 SSRF implemented with a user-owned
+  callback; IDOR discovery, hosted reports, and the real-world case study remain deferred.
 - **Owner:** aliz
 - **Slug:** `live-ssrf`
 - **Capability:** P4 — live Level 1 SSRF with a user-supplied callback
