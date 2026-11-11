@@ -11,6 +11,12 @@ from pry.intake.snapshot import new_run_dir, utc_now, write_snapshot
 from pry.own.target import normalize_target
 from pry.own.tokens import TokenSigner
 from pry.probe.idor import probe_idor
+from pry.probe.live_ssrf import (
+    SSRF_CALLBACK_SAME_ORIGIN,
+    probe_live_ssrf,
+    same_origin,
+    validate_live_ssrf,
+)
 from pry.probe.rate_limit import (
     LIVE_RATE_LIMIT_MAX_COUNT,
     LIVE_RATE_LIMIT_SPACING,
@@ -73,7 +79,7 @@ def _snapshot(target, sandbox_id, created_at, proof_type):
     }
 
 
-def _run_probes(origin, endpoints, idor_config=None):
+def _run_probes(origin, endpoints, idor_config=None, ssrf_config=None):
     results = [
         ProbeResult(**probe_cors(origin)),
         ProbeResult(**probe_errors(origin)),
@@ -85,6 +91,8 @@ def _run_probes(origin, endpoints, idor_config=None):
     )
     if idor_config is not None:
         results.append(ProbeResult(**probe_idor(origin, idor_config)))
+    if ssrf_config is not None:
+        results.append(ProbeResult(**probe_live_ssrf(origin, ssrf_config)))
     return results
 
 
@@ -98,6 +106,7 @@ def scan_live(
     headers=False,
     rate_limit_config=None,
     write_config=None,
+    ssrf_config=None,
 ):
     """Prove ownership of ``url``, run the read-only probes, finalize."""
     target = normalize_target(url)
@@ -109,6 +118,18 @@ def scan_live(
             rate_limit_config.count,
             max_count=LIVE_RATE_LIMIT_MAX_COUNT,
         )
+    if ssrf_config is not None:
+        ssrf_config = validate_live_ssrf(
+            ssrf_config.endpoint,
+            ssrf_config.parameter,
+            ssrf_config.callback_url,
+        )
+        if same_origin(target.origin, ssrf_config.callback_url):
+            raise ProbeError(
+                SSRF_CALLBACK_SAME_ORIGIN,
+                "the ssrf callback is on the target origin; a hit there is "
+                "not evidence the app fetched anything",
+            )
 
     sandbox_id = LIVE_PREFIX + secrets.token_hex(6)
     if out is None:
@@ -118,7 +139,7 @@ def scan_live(
     snapshot = _snapshot(target, sandbox_id, utc_now(), proof.proof_type)
     write_snapshot(run_dir, snapshot)
 
-    results = _run_probes(target.origin, endpoints, idor_config)
+    results = _run_probes(target.origin, endpoints, idor_config, ssrf_config)
     observations = [probe_headers(target.origin)] if headers else []
     if rate_limit_config is not None:
         observations.append(

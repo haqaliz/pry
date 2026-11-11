@@ -13,6 +13,11 @@ from pry.own.errors import OwnershipError
 from pry.own.target import normalize_target
 from pry.own.tokens import TokenSigner
 from pry.probe.idor import IdorConfig
+from pry.probe.live_ssrf import (
+    SSRF_CALLBACK_INVALID,
+    SSRF_CALLBACK_SAME_ORIGIN,
+    LiveSsrfConfig,
+)
 from pry.probe.rate_limit import (
     LIVE_RATE_LIMIT_SPACING,
     OBSERVED,
@@ -108,6 +113,7 @@ def sentinel(monkeypatch):
         "probe_idor",
         "probe_rate_limit",
         "probe_write",
+        "probe_live_ssrf",
     ):
         monkeypatch.setattr(live, name, guard)
     return guard
@@ -708,3 +714,154 @@ def test_scan_live_signs_a_not_reproduced_write_without_a_proof(
     write = outcome.results[-1]
     assert write.verdict == NOT_REPRODUCED
     assert write.proof is None
+
+
+SSRF_NONCE = "0123456789abcdef0123456789abcdef"
+
+
+def _ssrf_config(callback="https://callback.example/pry"):
+    return LiveSsrfConfig(
+        endpoint="/api/fetch", parameter="url", callback_url=callback
+    )
+
+
+def _ssrf_payload(base_url, config):
+    callback_url = config.callback_url.rstrip("/") + "/" + SSRF_NONCE
+    return {
+        "probe": "ssrf",
+        "verdict": EXPOSED,
+        "cause": None,
+        "evidence": "callback recorded GET /%s on poll 1/3 after app returned "
+        "status 200" % SSRF_NONCE,
+        "request": {
+            "method": "GET",
+            "url": base_url + config.endpoint + "?url=" + callback_url,
+            "headers": {"User-Agent": "pry/0.1"},
+        },
+        "response": {
+            "status": 200,
+            "headers": {},
+            "body": "ok",
+            "callback": {
+                "request": {
+                    "method": "GET",
+                    "url": callback_url,
+                    "headers": {"User-Agent": "pry/0.1"},
+                },
+                "response": {"status": 200, "headers": {}, "body": ""},
+                "attempts": 1,
+            },
+        },
+    }
+
+
+def test_scan_live_appends_the_live_ssrf_result_after_idor(
+    tmp_path, fake_probes, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        live,
+        "probe_idor",
+        lambda base_url, config: _payload(
+            "idor", NOT_REPRODUCED, base_url + config.object_b
+        ),
+    )
+    monkeypatch.setattr(
+        live,
+        "probe_live_ssrf",
+        lambda base_url, config: calls.append((base_url, config))
+        or _ssrf_payload(base_url, config),
+    )
+
+    config = _ssrf_config()
+    outcome = live.scan_live(
+        ORIGIN,
+        _token(),
+        idor_config=_idor_config(),
+        ssrf_config=config,
+        out=tmp_path / "run",
+    )
+
+    assert calls == [(ORIGIN, config)]
+    assert [result.probe for result in outcome.results] == [
+        "cors",
+        "errors",
+        "secrets",
+        "database",
+        "idor",
+        "ssrf",
+    ]
+    ssrf = outcome.results[-1]
+    assert ssrf.verdict == EXPOSED
+    assert ssrf.proof is not None
+    payload, _fingerprint = verify_bundle(load_bundle(ssrf.proof))
+    assert payload["finding"]["probe"] == "ssrf"
+    assert payload["finding"]["verdict"] == EXPOSED
+    assert payload["finding"]["response"]["callback"]["request"]["url"] == (
+        "https://callback.example/pry/" + SSRF_NONCE
+    )
+    data = json.loads(outcome.results_path.read_text(encoding="utf-8"))
+    assert data["results"][-1]["probe"] == "ssrf"
+
+
+def test_scan_live_without_an_ssrf_config_does_not_run_it(
+    tmp_path, fake_probes, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        live,
+        "probe_live_ssrf",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    outcome = live.scan_live(ORIGIN, _token(), out=tmp_path / "run")
+
+    assert calls == []
+    assert [result.probe for result in outcome.results] == list(PROBES)
+
+
+def test_scan_live_validates_the_token_before_the_ssrf_probe(
+    tmp_path, sentinel
+):
+    with pytest.raises(OwnershipError):
+        live.scan_live(
+            ORIGIN,
+            "garbage",
+            ssrf_config=_ssrf_config(),
+            out=tmp_path / "run",
+        )
+
+    assert sentinel.calls == []
+    assert not (tmp_path / "run").exists()
+
+
+def test_scan_live_rejects_a_same_origin_ssrf_callback_before_any_probe(
+    tmp_path, sentinel
+):
+    with pytest.raises(ProbeError) as exc:
+        live.scan_live(
+            ORIGIN,
+            _token(),
+            ssrf_config=_ssrf_config(ORIGIN + "/pry"),
+            out=tmp_path / "run",
+        )
+
+    assert exc.value.cause == SSRF_CALLBACK_SAME_ORIGIN
+    assert sentinel.calls == []
+    assert not (tmp_path / "run").exists()
+
+
+def test_scan_live_rejects_an_invalid_ssrf_callback_before_any_probe(
+    tmp_path, sentinel
+):
+    with pytest.raises(ProbeError) as exc:
+        live.scan_live(
+            ORIGIN,
+            _token(),
+            ssrf_config=_ssrf_config("http://callback.example/pry"),
+            out=tmp_path / "run",
+        )
+
+    assert exc.value.cause == SSRF_CALLBACK_INVALID
+    assert sentinel.calls == []
+    assert not (tmp_path / "run").exists()
