@@ -50,14 +50,14 @@ local/write replay and key distribution remain. M1.4 is not started.
 | # | Milestone | Done when |
 |---|---|---|
 | M2.1 | Live-target ownership flow | DNS/file verification works against a real domain, not just local fixtures |
-| M2.2 | Level 1 expanded read-only checks (P4) | Local SSRF + bounded local/live rate-limit observation; live SSRF deferred |
+| M2.2 | Level 1 expanded read-only checks (P4) | Local/live SSRF + bounded local/live rate-limit observation |
 | M2.3 | Level 2 write-based confirmation (P4) | Local sandbox write + verification read; live write requires a P1 token and an extra explicit confirmation; no rollback |
 | M2.4 | Findings corpus and report (P6) | Bank (target, probe, verdict, proof); local HTML report/corpus; hosted/public reports deferred |
 
 Phase 2 status (2026-11-11): M2.1 live read-only scan implemented with a P1 token; the
-real-domain manual check remains. M2.2 partial — local Level 1 SSRF and bounded local/live
-rate-limit observations implemented; live SSRF is not. M2.4 partial — local/live read-only
-HTML report and JSONL corpus implemented; hosted/public reports deferred. M2.3 partial —
+real-domain manual check remains. M2.2 done for the declared checks — local/live Level 1
+SSRF and bounded local/live rate-limit observations implemented. M2.4 partial — local/live
+read-only HTML report and JSONL corpus implemented; hosted/public reports deferred. M2.3 partial —
 declared Level 2 write confirmation implemented local and live; live writes need both
 confirmations and are not rolled back.
 

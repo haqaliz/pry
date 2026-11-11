@@ -20,13 +20,13 @@ Status: **P1 ownership gate implemented; P2 local intake implemented; P3 read-on
 implemented (first slice + missing-auth declarations); P5 read-only signed proof bundles and
 live read-only replay implemented for local and live read-only EXPOSED findings; P6 local
 findings report and corpus implemented; live read-only scans implemented; configured live IDOR
-implemented; local IDOR implemented; local Level 1 SSRF implemented; local and live rate-limit
-observations implemented; opt-in response header observations implemented; exposed database
-file checks implemented; provider database/open-rule checks implemented with a user-placed
-marker; local and live Level 2 write confirmation implemented; IDOR discovery, live SSRF,
-and hosted/public reports not started.** The
-gate lives in `src/pry/own/`; the sandbox in `src/pry/intake/`; the probes and live path in
-`src/pry/probe/`; the signed bundles in `src/pry/proof/`; the report in `src/pry/report/`. A
+implemented; local IDOR implemented; local and live Level 1 SSRF implemented; local and live
+rate-limit observations implemented; opt-in response header observations implemented; exposed
+database file checks implemented; provider database/open-rule checks implemented with a
+user-placed marker; local and live Level 2 write confirmation implemented; IDOR discovery and
+hosted/public reports not started.** The gate lives in `src/pry/own/`; the sandbox in
+`src/pry/intake/`; the probes and live path in `src/pry/probe/`; the signed bundles in
+`src/pry/proof/`; the report in `src/pry/report/`. A
 local `pry scan --endpoint /path` sends an unauthenticated GET to a declared-protected path; a
 URL scan with a P1 token runs the same probes and configured IDOR live and signs/reports the
 results. IDOR configs are 0600; the local config is mounted read-only and removed, and
@@ -44,8 +44,9 @@ hardening observation, never `EXPOSED`. `pry replay BUNDLE --token` verifies a s
 read-only proof, checks the P1 token, and re-sends the recorded GET; it compares statuses
 only and signs nothing. `pry database --config FILE --confirm-marker` reads a marker the
 owner placed in a Firebase RTDB or Supabase project, then one declared data path; the marker
-is an explicit weaker ownership attestation, not DNS-grade. SSRF is local-only. Do not
-describe capability that isn't there yet.
+is an explicit weaker ownership attestation, not DNS-grade. Live SSRF uses a user-owned
+callback: one declared fetch with a per-run nonce, then up to three polls; only a callback
+200 is `EXPOSED`. Do not describe capability that isn't there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed
@@ -105,7 +106,7 @@ No "SAFE" or "SECURE" verdict exists. A heuristic may prioritize; a reproduced e
 
 - **Level 0 (default):** read-only, floor checks only (missing auth, broken access control,
   exposed secrets, exposed database files/open rules, verbose errors, missing headers/open CORS).
-- **Level 1:** read-only, expanded checks (non-mutating local SSRF probes, bounded
+- **Level 1:** read-only, expanded checks (non-mutating local/live SSRF probes, bounded
   local/live rate-limit observations).
 - **Level 2:** write-based confirmation. One declared write plus a verification read with a
   unique marker. Local runs use the disposable sandbox; a live target needs a P1 token and

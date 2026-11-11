@@ -215,26 +215,33 @@ def test_architecture_idor_status():
 
 def test_readme_ssrf_is_honest():
     text = " ".join(_read("README.md").split())
-    assert "Local SSRF (Level 1)" in text
+    assert "SSRF (Level 1, local and live)" in text
     assert "--level 1" in text
     assert "--confirm" in text
     assert "--ssrf-endpoint" in text
-    assert "callback" in text
+    assert "--ssrf-callback-url" in text
+    assert "200 only after" in text
+    assert "different origin" in text
+
+
+def test_roadmap_ssrf_status():
+    text = " ".join(_read("docs/ROADMAP.md").split()).lower()
+    assert "local/live level 1 ssrf" in text
 
 
 def test_claude_ssrf_status():
     text = " ".join(_read("CLAUDE.md").split()).lower()
-    assert "local level 1 ssrf" in text
+    assert "local and live level 1 ssrf" in text
 
 
 def test_capability_roadmap_ssrf_status():
     text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split()).lower()
-    assert "local level 1 ssrf" in text
+    assert "local and live level 1 ssrf" in text
 
 
 def test_architecture_ssrf_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
-    assert "local level 1 ssrf" in text
+    assert "ssrf level 1 is callback-proven" in text
 
 
 def test_readme_rate_limit_is_honest():

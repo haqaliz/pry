@@ -4,13 +4,13 @@ Design intent, not built behavior. P1 is implemented; P2 local intake is impleme
 read-only probes are implemented; P5 read-only signed bundles and live read-only replay are
 implemented for local and live read-only findings; P6 local report/corpus are implemented;
 live read-only scans and
-configured live IDOR and configured local IDOR are implemented; local Level 1 SSRF and a
-bounded local rate-limit observation and a bounded live rate-limit observation are
+configured live IDOR and configured local IDOR are implemented; local and live Level 1 SSRF
+and bounded local/live rate-limit observations are
 implemented; opt-in response header observations and served database file checks are
 implemented for local and live scans; local and live Level 2 write confirmation is
 implemented (live needs an extra confirmation); provider database/open-rule checks are
-implemented with a user-placed marker; live SSRF, general authenticated scanning, hosted
-reports, and the rest of P5 are design intent.
+implemented with a user-placed marker; general authenticated scanning, hosted reports, and
+the rest of P5 are design intent.
 
 ## Pipeline
 
@@ -41,7 +41,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + local/live rate-limit observation + local/live Level 2 write confirmation; provider database marker checks
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local/live SSRF (callback) + local/live rate-limit observation + local/live Level 2 write confirmation; provider database marker checks
   proof/      P5: Ed25519 signed bundles for local/live findings + live read-only replay
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
   cli/        pry scan | verify-ownership | intake | verify-proof | replay | report
@@ -73,9 +73,10 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
   request can be EXPOSED. The local config is mounted read-only at `/pry-config/idor.json` in
   the sandbox and removed afterward. Stored auth/cookie headers are redacted; no config path or
   credentials are reported. No discovery or non-configured sweep.
-- **Local SSRF Level 1 is callback-proven.** A callback sidecar on the internal network logs a
-  per-run nonce; `EXPOSED` only on a hit. `--confirm` is required, the callback has no egress,
-  and live SSRF is deferred. A hit proves an internal fetch, not external egress.
+- **SSRF Level 1 is callback-proven.** Local uses a callback sidecar on the internal network;
+  live uses a user-owned callback URL with a poll contract. One declared fetch carries a
+  per-run nonce; `EXPOSED` only on a callback 200. `--confirm` is required. A hit proves the
+  app fetched that URL, not arbitrary egress or an internal network sweep.
 - **Rate-limit is an observation, not a verdict.** A bounded sample reports
   `OBSERVED`/`THROTTLED`/`UNVERIFIED` in a separate, unsigned section. It never becomes
   `EXPOSED`. Live sampling requires level 1 + `--confirm`, is capped at five GETs, spaced

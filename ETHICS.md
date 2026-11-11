@@ -39,8 +39,11 @@
 
 - Level 0 is read-only and always on: GET/HEAD-style checks only.
 - Level 1 is expanded read-only work and requires explicit per-target confirmation.
-- Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress. A callback hit
-  proves the app fetched an internal URL, not arbitrary external egress. No live SSRF.
+- Level 1 SSRF requires `--confirm`. Local uses a callback sidecar with no egress. Live uses
+  a callback URL you own: one declared fetch with a per-run nonce, then up to three polls;
+  only a callback 200 is `EXPOSED`. Do not use a third-party callback without permission,
+  and do not turn the check into internal port scanning. A hit proves the app fetched that
+  one URL, not arbitrary egress.
 - The rate-limit observation is a bounded sample and a hardening observation, not a verdict.
   Local: 1–20 GETs. Live: max 5 GETs, 0.5s apart, level 1 + `--confirm`, stop on the first
   429/503/`Retry-After`. A missing limit is not `EXPOSED`. Live sampling can still cause load
@@ -72,10 +75,10 @@
 - GET only; no `Authorization`/`Cookie`; no writes; up to 12 requests, plus one for
   `--headers`, one per `--endpoint`, three for configured IDOR, and up to five for a live
   rate-limit observation.
-- Not a load test: live SSRF is not implemented. Live Level 2 writes are separate, need both
-  confirmations, can alter real data, and are not rolled back. Local Level 1 SSRF and the
-  bounded local/live rate-limit observations also require `--confirm`; the live rate-limit
-  sample is capped at five GETs and stops on the first throttle.
+- Not a load test: live SSRF is one declared fetch plus up to three callback polls. Live
+  Level 2 writes are separate, need both confirmations, can alter real data, and are not
+  rolled back. SSRF and the bounded local/live rate-limit observations require `--confirm`;
+  the live rate-limit sample is capped at five GETs and stops on the first throttle.
 - The P1 token is the owner's authorization. If the target is shared or production, the owner
   must confirm they control it.
 - `pry replay` re-sends one recorded read-only GET after a fresh P1 check. It sends no

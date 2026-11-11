@@ -18,12 +18,12 @@ leakage, exposed secret files, served database files, and declared-protected end
 return 200 JSON with no credentials. P5 read-only signed proof bundles and live read-only
 replay implemented for local and live read-only EXPOSED findings. P6 local findings report and
 corpus implemented. Live read-only scans and configured live IDOR checks are implemented for
-URLs with a P1 token; configured local IDOR runs in the sandbox. Local Level 1 SSRF and bounded
-local/live rate-limit observations are implemented with `--confirm`. Local and live Level 2
+URLs with a P1 token; configured local IDOR runs in the sandbox. Local and live Level 1 SSRF
+and bounded local/live rate-limit observations are implemented with `--confirm`. Local and live Level 2
 write confirmation is implemented (live needs an extra confirmation). Opt-in response header
 observations are implemented for local and live scans. Provider database/open-rule checks
-are implemented for Firebase RTDB and Supabase with a user-placed marker. IDOR discovery,
-live SSRF, and hosted/public reports are not started. A clean P3 result is
+are implemented for Firebase RTDB and Supabase with a user-placed marker. IDOR discovery and
+hosted/public reports are not started. A clean P3 result is
 `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
@@ -205,7 +205,8 @@ target; the token is the authorization.
   `--endpoint` paths; same verdict rules as a local scan.
 - Results are signed and reportable with `--report`; `--headers` adds an unsigned observation.
 - A missing, invalid, or wrong-target token exits 2 before any request.
-- Live SSRF is not implemented. Live Level 2 writes require a P1 token plus `--confirm` and
+- Live SSRF requires a user-owned callback URL and returns `EXPOSED` only when the callback
+  records the nonce. Live Level 2 writes require a P1 token plus `--confirm` and
   `--confirm-live-write`, can alter real data, and are not rolled back; prefer staging. Live
   rate-limit is a bounded observation at level 1 with `--confirm`.
 
@@ -313,7 +314,7 @@ code. A present header is not proof of security, a missing one is not proof of e
 and a CDN/proxy may be the one setting them. Local and live; no auth, no writes, no new
 confirmation.
 
-## Local SSRF (Level 1)
+## SSRF (Level 1, local and live)
 
 ```bash
 pry scan ./my-app --level 1 --confirm \
@@ -326,12 +327,26 @@ Pry sends the declared endpoint a callback URL with a per-run nonce, and the app
 `EXPOSED` only when the callback records the nonce. The app responding without a hit is
 `NOT_REPRODUCED`; a transport or callback-control failure is `UNVERIFIED`.
 
+Live SSRF uses a callback you run:
+
+```bash
+pry scan https://example.com --token <token> --level 1 --confirm \
+  --ssrf-endpoint /api/fetch --ssrf-parameter url \
+  --ssrf-callback-url https://callback.example/pry
+```
+
+The callback contract: `GET <base>/<nonce>` returns **200 only after that nonce was hit**,
+and 404 before. Pry sends one declared fetch, then polls the callback up to three times,
+0.5s apart. A poll 200 is `EXPOSED`; no hit is `NOT_REPRODUCED`; a callback transport/5xx
+failure is `UNVERIFIED`. The callback must be on a different origin, HTTPS (HTTP only for
+loopback tests), and one you are allowed to use.
+
 - GET query parameter only; no POST/body/header injection.
-- The callback hit proves the app fetched an internal callback URL. It does **not** prove
-  arbitrary external egress.
-- No live SSRF (needs a public callback); local Level 2 write confirmation is separate.
-- Missing `--confirm`, SSRF flags at level 0, or a URL with SSRF flags → exit 2.
-- The callback sidecar has no egress and no host port; it is removed with the sandbox.
+- The callback hit proves the app fetched the callback URL. It does **not** prove arbitrary
+  external egress or scan the target's internal network.
+- Local Level 2 write confirmation is separate.
+- Missing `--confirm`, SSRF flags at level 0, or a callback on the target origin → exit 2.
+- The local callback sidecar has no egress and no host port; it is removed with the sandbox.
 
 ## Rate-Limit Observation (Level 1, local and live)
 
@@ -420,7 +435,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation + local/live Level 2 write confirmation; provider database marker checks
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local/live SSRF + rate-limit observation + local/live Level 2 write confirmation; provider database marker checks
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -471,6 +486,11 @@ pry scan ./my-app --idor-config idor.json
 # Local Level 1 SSRF (requires explicit confirmation)
 pry scan ./my-app --level 1 --confirm \
   --ssrf-endpoint /api/fetch --ssrf-parameter url
+
+# Live Level 1 SSRF (user-owned callback; 200 = hit)
+pry scan https://example.com --token <token> --level 1 --confirm \
+  --ssrf-endpoint /api/fetch --ssrf-parameter url \
+  --ssrf-callback-url https://callback.example/pry
 
 # Local rate-limit observation (hardening, not a verdict)
 pry scan ./my-app --level 1 --confirm \
@@ -528,11 +548,12 @@ Pry implements a strict ownership gate with:
    The local config is mounted read-only into the sandbox and removed afterward. Stored headers
    redact auth/cookie/API-key values.
 8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is
-   the only EXPOSED condition. The rate-limit probe and header check are hardening
-   observations, not verdicts. Live rate-limit is capped at five GETs, spaced 0.5s, and
-   stops on the first throttle. Level 2 writes need a verification marker; local runs use the
-   disposable sandbox, live runs require both confirmations, can alter real data, and are not
-   rolled back. Live SSRF is not implemented.
+   the only EXPOSED condition. Live SSRF requires `--confirm` and a user-owned callback;
+   one declared fetch and up to three callback polls, and only a callback 200 is EXPOSED.
+   The rate-limit probe and header check are hardening observations, not verdicts. Live
+   rate-limit is capped at five GETs, spaced 0.5s, and stops on the first throttle. Level 2
+   writes need a verification marker; local runs use the disposable sandbox, live runs
+   require both confirmations, can alter real data, and are not rolled back.
 9. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence. The
    report shows hardening observations separately from verdicts.
 10. Absence of a reproduced finding is never reported as "secure".
