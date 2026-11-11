@@ -427,3 +427,32 @@ def test_architecture_provider_database_status():
 def test_roadmap_provider_database_status():
     text = " ".join(_read("docs/ROADMAP.md").split()).lower()
     assert "provider database/open-rule checks are implemented" in text
+
+
+def test_readme_release_install_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "pry-scanner" in text
+    assert "v0.1.0" in text
+    assert "CI / Pre-Publish" in text
+    assert "haqaliz/pry@v0.1.0" in text
+
+
+def test_changelog_records_the_release():
+    text = " ".join(_read("CHANGELOG.md").split())
+    assert "## [0.1.0] - 2026-11-12" in text
+    assert "pry-scanner" in text
+    assert "Not in 0.1.0" in text
+
+
+def test_security_policy_uses_private_reporting():
+    text = " ".join(_read("SECURITY.md").split())
+    assert "GitHub private vulnerability reporting" in text
+    assert "/security/advisories/new" in text
+    assert "Do not open a public issue" in text
+
+
+def test_release_checklist_names_the_distribution():
+    text = " ".join(_read("docs/RELEASE.md").split())
+    assert "`pry-scanner`" in text
+    assert "PYPI_PUBLISH" in text
+    assert "git tag -a vX.Y.Z" in text

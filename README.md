@@ -2,6 +2,8 @@
 
 **Pry proves that an app you own is exposed, by actually trying the exploit against it.**
 
+v0.1.0 · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [release checklist](docs/RELEASE.md)
+
 ## What This Is
 
 Pry verifies security exposures in web applications by actually attempting exploits, never
@@ -450,15 +452,27 @@ Pry's core architecture follows:
 
 ## Installation & Usage
 
-Requires Python 3.9+, `uv`, and Docker for local intake.
+Requires Python 3.9+ and Docker for local intake. The PyPI distribution is
+**`pry-scanner`**; the installed command is **`pry`**.
+
+```bash
+# Install from the v0.1.0 GitHub tag (works now)
+uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"
+
+# Once the PyPI project is published
+uv tool install pry-scanner
+
+pry --version
+pry --help
+```
+
+For development:
 
 ```bash
 uv sync
 uv run pytest
 uv run pry --help
 ```
-
-Or install the package with `pip install -e .`.
 
 ```bash
 # Prove ownership using the DNS TXT method
@@ -526,6 +540,37 @@ Docker integration tests are opt-in:
 ```bash
 PRY_DOCKER_TESTS=1 uv run pytest -q -m docker
 ```
+
+## CI / Pre-Publish
+
+The repository ships a composite action at `action.yml`. It installs Pry, runs a local
+repository scan, and fails the job on any `EXPOSED` finding. GitHub-hosted Ubuntu runners
+already have Docker, which the local sandbox requires.
+
+```yaml
+name: Pry scan
+on: [push, pull_request]
+jobs:
+  pry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haqaliz/pry@v0.1.0
+        with:
+          target: .
+          out: pry-run
+          # args: --headers
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pry-run
+          path: pry-run
+```
+
+The action inputs are `target` (default `.`), `args` (extra `pry scan` flags), and `out`
+(default `pry-run`). The run directory contains `results.json`, the snapshot, signed proof
+bundles, and the corpus. A `NOT_REPRODUCED` result exits 0; `EXPOSED` exits 1 and fails the
+job. A live target still needs a P1 token and the appropriate confirmation flags.
 
 ## Security Model
 
