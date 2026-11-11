@@ -359,12 +359,12 @@ def test_invalid_ssrf_config_never_scans(repo, monkeypatch, capsys, extra):
 @pytest.mark.parametrize(
     "extra,cause",
     [
-        (["--level", "1", "--confirm"] + SSRF_ARGV, "SSRF_REQUIRES_LOCAL"),
+        (["--level", "1", "--confirm"] + SSRF_ARGV, "SSRF_CONFIG_REQUIRED"),
         (["--level", "1"], "CONFIRMATION_REQUIRED"),
         (["--level", "0"] + SSRF_ARGV, "SSRF_REQUIRES_LEVEL1"),
     ],
 )
-def test_a_url_refuses_live_ssrf_flags(monkeypatch, capsys, extra, cause):
+def test_a_url_needs_a_live_callback_for_ssrf(monkeypatch, capsys, extra, cause):
     code, out, local, live = _gate(
         monkeypatch,
         capsys,

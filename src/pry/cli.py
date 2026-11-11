@@ -32,6 +32,7 @@ from pry.probe.database_rules import (
 )
 from pry.probe.idor import load_idor_config
 from pry.probe.live import scan_live
+from pry.probe.live_ssrf import validate_live_ssrf
 from pry.probe.replay import (
     MATCH as REPLAY_MATCH,
     MISMATCH as REPLAY_MISMATCH,
@@ -60,7 +61,7 @@ _USAGE_CAUSES = {UNSUPPORTED_TARGET, BAD_CHALLENGE, UNSUPPORTED_METHOD, NO_METHO
 CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
 SSRF_CONFIG_REQUIRED = "SSRF_CONFIG_REQUIRED"
 SSRF_REQUIRES_LEVEL1 = "SSRF_REQUIRES_LEVEL1"
-SSRF_REQUIRES_LOCAL = "SSRF_REQUIRES_LOCAL"
+SSRF_CALLBACK_LOCAL = "SSRF_CALLBACK_LOCAL"
 RATE_LIMIT_CONFIG_REQUIRED = "RATE_LIMIT_CONFIG_REQUIRED"
 RATE_LIMIT_REQUIRES_LEVEL1 = "RATE_LIMIT_REQUIRES_LEVEL1"
 LEVEL1_CHECK_REQUIRED = "LEVEL1_CHECK_REQUIRED"
@@ -105,8 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         choices=[0, 1, 2],
         help=(
-            "Intensity level (0 floor, 1 local SSRF/rate-limit and live "
-            "rate-limit; 2 local/live write confirmation)"
+            "Intensity level (0 floor, 1 SSRF/rate-limit checks, local and "
+            "live; 2 local/live write confirmation)"
         ),
     )
     scan.add_argument(
@@ -158,12 +159,23 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--ssrf-endpoint",
         metavar="PATH",
-        help="Declared fetch endpoint for the local level 1 SSRF check",
+        help=(
+            "Declared fetch endpoint for the level 1 SSRF check (local or "
+            "live)"
+        ),
     )
     scan.add_argument(
         "--ssrf-parameter",
         metavar="NAME",
         help="Query parameter that takes the callback URL",
+    )
+    scan.add_argument(
+        "--ssrf-callback-url",
+        metavar="URL",
+        help=(
+            "Live only: a callback base URL you own; Pry GETs BASE/<nonce> up "
+            "to 3 times and only a 200 proves the fetch"
+        ),
     )
     scan.add_argument(
         "--rate-limit-endpoint",
@@ -524,6 +536,15 @@ def _observation_line(observation: dict) -> str:
 
 
 def _scan_target_path(args) -> int:
+    if args.ssrf_callback_url is not None:
+        _print_error(
+            ProbeError(
+                SSRF_CALLBACK_LOCAL,
+                "local SSRF uses the built-in callback; --ssrf-callback-url "
+                "is live-only",
+            )
+        )
+        return 2
     has_ssrf_flags = (
         args.ssrf_endpoint is not None or args.ssrf_parameter is not None
     )
@@ -667,7 +688,9 @@ def _scan_target_path(args) -> int:
 def _scan_target_url(args) -> int:
     has_write = args.write_config is not None
     has_ssrf_flags = (
-        args.ssrf_endpoint is not None or args.ssrf_parameter is not None
+        args.ssrf_endpoint is not None
+        or args.ssrf_parameter is not None
+        or args.ssrf_callback_url is not None
     )
     has_rate_limit_flags = (
         args.rate_limit_endpoint is not None
@@ -721,20 +744,29 @@ def _scan_target_url(args) -> int:
         )
         return 2
     if has_ssrf_flags:
-        cause = (
-            SSRF_REQUIRES_LOCAL
-            if args.level >= 1
-            else SSRF_REQUIRES_LEVEL1
-        )
-        _print_error(
-            ProbeError(
-                cause,
-                "SSRF checks are local-only; live rate-limit is available at "
-                "level 1 with --confirm",
-            ),
-            args.json,
-        )
-        return 2
+        if args.level < 1:
+            _print_error(
+                ProbeError(
+                    SSRF_REQUIRES_LEVEL1,
+                    "live SSRF requires --level 1 and --confirm",
+                ),
+                args.json,
+            )
+            return 2
+        if (
+            args.ssrf_endpoint is None
+            or args.ssrf_parameter is None
+            or args.ssrf_callback_url is None
+        ):
+            _print_error(
+                ProbeError(
+                    SSRF_CONFIG_REQUIRED,
+                    "live SSRF requires --ssrf-endpoint, --ssrf-parameter, "
+                    "and --ssrf-callback-url",
+                ),
+                args.json,
+            )
+            return 2
 
     rate_limit_config = None
     if has_rate_limit_flags:
@@ -767,11 +799,12 @@ def _scan_target_url(args) -> int:
         except ProbeError as exc:
             _print_error(exc, args.json)
             return 2
-    elif args.level == 1:
+    elif args.level == 1 and not has_ssrf_flags:
         _print_error(
             ProbeError(
                 LEVEL1_CHECK_REQUIRED,
-                "live level 1 requires --rate-limit-endpoint",
+                "live level 1 requires --ssrf-endpoint, --ssrf-parameter, "
+                "--ssrf-callback-url, or --rate-limit-endpoint",
             ),
             args.json,
         )
@@ -788,6 +821,15 @@ def _scan_target_url(args) -> int:
         write_config = (
             load_write_config(args.write_config) if has_write else None
         )
+        ssrf_config = (
+            validate_live_ssrf(
+                args.ssrf_endpoint,
+                args.ssrf_parameter,
+                args.ssrf_callback_url,
+            )
+            if has_ssrf_flags
+            else None
+        )
     except (OwnershipError, ProbeError) as exc:
         _print_error(exc, args.json)
         return 2
@@ -803,6 +845,8 @@ def _scan_target_url(args) -> int:
         live_kwargs["rate_limit_config"] = rate_limit_config
     if write_config is not None:
         live_kwargs["write_config"] = write_config
+    if ssrf_config is not None:
+        live_kwargs["ssrf_config"] = ssrf_config
     try:
         outcome = scan_live(args.target, token, **live_kwargs)
     except (OwnershipError, IntakeError, ProbeError, ProofError) as exc:

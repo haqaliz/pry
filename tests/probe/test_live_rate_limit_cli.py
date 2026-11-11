@@ -166,7 +166,7 @@ def test_live_level1_requires_a_rate_limit_endpoint(
     assert fake.calls == []
 
 
-def test_live_ssrf_flags_are_still_local_only(tmp_path, monkeypatch, capsys):
+def test_live_ssrf_without_a_callback_is_refused(tmp_path, monkeypatch, capsys):
     code, fake = _gate(
         monkeypatch,
         [
@@ -186,7 +186,7 @@ def test_live_ssrf_flags_are_still_local_only(tmp_path, monkeypatch, capsys):
     )
 
     assert code == 2
-    assert "SSRF_REQUIRES_LOCAL" in capsys.readouterr().out
+    assert "SSRF_CONFIG_REQUIRED" in capsys.readouterr().out
     assert fake.calls == []
 
 

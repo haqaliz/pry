@@ -303,7 +303,7 @@ def test_a_live_write_config_must_be_0600(tmp_path, monkeypatch, capsys):
     assert fake.calls == []
 
 
-def test_live_ssrf_is_still_refused_at_level2(tmp_path, monkeypatch, capsys):
+def test_live_ssrf_can_run_with_a_level2_write(tmp_path, monkeypatch, capsys):
     path = _config_file(tmp_path)
     code, fake = _gate(
         monkeypatch,
@@ -323,12 +323,16 @@ def test_live_ssrf_is_still_refused_at_level2(tmp_path, monkeypatch, capsys):
             "/api/fetch",
             "--ssrf-parameter",
             "url",
+            "--ssrf-callback-url",
+            "https://callback.example/pry",
         ],
     )
 
-    assert code == 2
-    assert "SSRF_REQUIRES_LOCAL" in capsys.readouterr().out
-    assert fake.calls == []
+    assert code == 0
+    assert fake.calls[0][2]["ssrf_config"].callback_url == (
+        "https://callback.example/pry"
+    )
+    assert fake.calls[0][2]["write_config"].endpoint == "/api/write"
 
 
 def test_live_level2_write_can_include_a_rate_limit_observation(
