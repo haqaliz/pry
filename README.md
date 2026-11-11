@@ -21,9 +21,10 @@ corpus implemented. Live read-only scans and configured live IDOR checks are imp
 URLs with a P1 token; configured local IDOR runs in the sandbox. Local Level 1 SSRF and bounded
 local/live rate-limit observations are implemented with `--confirm`. Local and live Level 2
 write confirmation is implemented (live needs an extra confirmation). Opt-in response header
-observations are implemented for local and live scans. IDOR discovery, provider
-database/open-rule checks, live SSRF, and hosted/public reports are not started. A clean P3
-result is `NOT_REPRODUCED`, never "secure."
+observations are implemented for local and live scans. Provider database/open-rule checks
+are implemented for Firebase RTDB and Supabase with a user-placed marker. IDOR discovery,
+live SSRF, and hosted/public reports are not started. A clean P3 result is
+`NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -113,8 +114,8 @@ The first slice checks six classes:
 
 The endpoint list is your declaration: Pry does not discover routes or infer auth from code.
 The result is "this declared-protected path returned data with no credentials," not "the app
-has no authentication." Endpoint discovery, IDOR discovery, provider database/open-rule
-checks (Firebase, Supabase), and header policy analysis are deferred. See
+has no authentication." Endpoint discovery, IDOR discovery, and header policy analysis are
+deferred. Provider database/open-rule checks are a separate `pry database` command. See
 [`ETHICS.md`](ETHICS.md) for what an exposure does and does not assert.
 
 ```bash
@@ -141,6 +142,55 @@ failure is `UNVERIFIED`.
 These are four conventional paths, not a database sweep. Provider rule checks (Firebase,
 Supabase) are deferred: Pry cannot prove ownership of a third-party database host with the
 current P1 methods.
+
+## Provider Database Rules (Firebase / Supabase)
+
+P1 cannot prove ownership of `*.firebaseio.com` or `*.supabase.co`. This check uses a
+marker you place in a database you own; `--confirm-marker` acknowledges that the marker is
+a control attestation, not a DNS-grade ownership proof. Use a project you own, and prefer a
+staging project.
+
+Firebase Realtime Database:
+
+```json
+{
+  "provider": "firebase-rtdb",
+  "url": "https://project-default-rtdb.firebaseio.com",
+  "marker_path": "/.pry-ownership",
+  "marker": "pry-<random>",
+  "read_path": "/users"
+}
+```
+
+Add a node at `/.pry-ownership` whose value is the marker (or `{"marker": "..."}`).
+The check reads `<url>/.pry-ownership.json` first, then `<url>/users.json`.
+
+Supabase REST:
+
+```json
+{
+  "provider": "supabase",
+  "url": "https://project.supabase.co",
+  "anon_key": "<public anon key>",
+  "marker_path": "/rest/v1/pry_ownership?select=marker",
+  "marker": "pry-<random>",
+  "read_path": "/rest/v1/users?select=*"
+}
+```
+
+Create a `pry_ownership` row with a `marker` column containing the marker. The check sends
+the public `apikey` on both requests; the key is redacted from results, proofs, and errors.
+
+```bash
+chmod 600 db.json
+pry database --config db.json --confirm-marker
+```
+
+The marker must match before the data path is requested. A same-origin 2xx with non-empty
+JSON data is `EXPOSED`, signed, and reportable. Empty `{}`/`[]`/`null`, a non-JSON body, or
+401/403/404 is `NOT_REPRODUCED`; 5xx/transport is `UNVERIFIED`. Only the declared path is
+read, capped at 4 KiB; this is not a database dump. A marker in an open-write database is
+not proof of ownership — the `--confirm-marker` attestation is your responsibility.
 
 ## Live Read-Only Scans
 
@@ -370,7 +420,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation + local/live Level 2 write confirmation
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation + local/live Level 2 write confirmation; provider database marker checks
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 

@@ -22,8 +22,9 @@ live read-only replay implemented for local and live read-only EXPOSED findings;
 findings report and corpus implemented; live read-only scans implemented; configured live IDOR
 implemented; local IDOR implemented; local Level 1 SSRF implemented; local and live rate-limit
 observations implemented; opt-in response header observations implemented; exposed database
-file checks implemented; local and live Level 2 write confirmation implemented; IDOR discovery,
-provider database/open-rule checks, live SSRF, and hosted/public reports not started.** The
+file checks implemented; provider database/open-rule checks implemented with a user-placed
+marker; local and live Level 2 write confirmation implemented; IDOR discovery, live SSRF,
+and hosted/public reports not started.** The
 gate lives in `src/pry/own/`; the sandbox in `src/pry/intake/`; the probes and live path in
 `src/pry/probe/`; the signed bundles in `src/pry/proof/`; the report in `src/pry/report/`. A
 local `pry scan --endpoint /path` sends an unauthenticated GET to a declared-protected path; a
@@ -41,7 +42,10 @@ there is no rollback, and staging is preferred. An opt-in `--headers` check make
 `/` on a local or live scan and reports missing/present recommended headers as an unsigned
 hardening observation, never `EXPOSED`. `pry replay BUNDLE --token` verifies a signed
 read-only proof, checks the P1 token, and re-sends the recorded GET; it compares statuses
-only and signs nothing. SSRF is local-only. Do not describe capability that isn't there yet.
+only and signs nothing. `pry database --config FILE --confirm-marker` reads a marker the
+owner placed in a Firebase RTDB or Supabase project, then one declared data path; the marker
+is an explicit weaker ownership attestation, not DNS-grade. SSRF is local-only. Do not
+describe capability that isn't there yet.
 
 Lineage: one of three siblings scaffolded together on 2026-10-22 (with Assay and Tenon) from a
 market-demand pass (`~/dev/at/ideas/market-demand-2026-10.md`), prompted by the scale of exposed

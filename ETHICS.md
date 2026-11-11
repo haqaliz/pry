@@ -51,6 +51,11 @@
 - The served-database check is four fixed GETs for conventional database paths. A SQLite
   header or SQL-dump signature is `EXPOSED`, but only a short signature excerpt is stored;
   rows and binary content are never kept. A clean result says nothing about other paths.
+- Provider database checks require a marker the owner places in a Firebase RTDB or Supabase
+  project. `--confirm-marker` acknowledges it is a control attestation, not a DNS-grade
+  ownership proof; do not point it at a project you do not own. A Supabase anon key is
+  treated as a credential (0600 config, redacted). Only one declared data path is read,
+  capped at 4 KiB; this is not a database dump.
 - Level 2 is write-based confirmation: one declared write, a unique marker, and a
   verification read. Local runs use the disposable sandbox. A live write requires a P1 token
   plus `--confirm` and `--confirm-live-write`; it can alter real data, there is no rollback,

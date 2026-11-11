@@ -391,3 +391,32 @@ def test_architecture_live_replay_status():
 def test_roadmap_live_replay_status():
     text = " ".join(_read("docs/ROADMAP.md").split()).lower()
     assert "live read-only replay is implemented" in text
+
+
+def test_readme_provider_database_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "Provider Database Rules (Firebase / Supabase)" in text
+    assert "--confirm-marker" in text
+    assert "control attestation" in text
+    assert "apikey" in text
+    assert "4 KiB" in text
+
+
+def test_claude_provider_database_status():
+    text = " ".join(_read("CLAUDE.md").split()).lower()
+    assert "provider database/open-rule checks implemented" in text
+
+
+def test_capability_roadmap_provider_database_status():
+    text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split()).lower()
+    assert "provider database marker checks" in text
+
+
+def test_architecture_provider_database_status():
+    text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
+    assert "provider database checks use a marker" in text
+
+
+def test_roadmap_provider_database_status():
+    text = " ".join(_read("docs/ROADMAP.md").split()).lower()
+    assert "provider database/open-rule checks are implemented" in text
