@@ -335,28 +335,30 @@ def test_architecture_database_file_status():
 
 def test_readme_level2_write_is_honest():
     text = " ".join(_read("README.md").split())
-    assert "Level 2 Write Confirmation (local)" in text
+    assert "Level 2 Write Confirmation (local and live)" in text
     assert "{{marker}}" in text
     assert "verification pair" in text
-    assert "Local only" in text
-    assert "live writes are rejected" in text
+    assert "--confirm-live-write" in text
+    assert "there is no rollback" in text
+    assert "staging" in text
 
 
 def test_claude_level2_write_status():
     text = " ".join(_read("CLAUDE.md").split()).lower()
-    assert "local level 2 write confirmation implemented" in text
+    assert "local and live level 2 write confirmation implemented" in text
 
 
 def test_capability_roadmap_level2_write_status():
     text = " ".join(_read("docs/technical/CAPABILITY_ROADMAP.md").split()).lower()
-    assert "local level 2 write confirmation implemented" in text
+    assert "local and live level 2 write confirmation implemented" in text
 
 
 def test_architecture_level2_write_status():
     text = " ".join(_read("docs/technical/ARCHITECTURE.md").split()).lower()
-    assert "local level 2 writes are sandbox-only" in text
+    assert "level 2 writes are marker-verified" in text
+    assert "--confirm-live-write" in text
 
 
 def test_roadmap_level2_write_status():
     text = " ".join(_read("docs/ROADMAP.md").split())
-    assert "local Level 2 write confirmation implemented" in text
+    assert "Level 2 write confirmation implemented local and live" in text

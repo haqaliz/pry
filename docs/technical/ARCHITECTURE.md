@@ -6,9 +6,10 @@ live read-only findings; P6 local report/corpus are implemented; live read-only 
 configured live IDOR and configured local IDOR are implemented; local Level 1 SSRF and a
 bounded local rate-limit observation and a bounded live rate-limit observation are
 implemented; opt-in response header observations and served database file checks are
-implemented for local and live scans; local Level 2 write confirmation is implemented;
-live write-based checks, live SSRF, provider database/open-rule checks, live Level 2,
-general authenticated scanning, hosted reports, and the rest of P5 are design intent.
+implemented for local and live scans; local and live Level 2 write confirmation is
+implemented (live needs an extra confirmation); live SSRF, provider database/open-rule
+checks, general authenticated scanning, hosted reports, and the rest of P5 are design
+intent.
 
 ## Pipeline
 
@@ -39,7 +40,7 @@ target (local repo | live URL)
 src/pry/
   own/        P1: verification methods, proof tokens
   intake/     P2: local repo sandbox boot (live URL deferred)
-  probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + local/live rate-limit observation + local Level 2 write confirmation
+  probe/      P3: read-only sidecar probes (CORS, errors, secrets, database files, declared unauth endpoints) + live read-only + configured live/local IDOR + header observations; P4 Level 1 local SSRF (callback) + local/live rate-limit observation + local/live Level 2 write confirmation
   proof/      P5: Ed25519 signed bundles for local findings (live replay deferred)
   report/     P6: local HTML report and JSONL corpus (hosted/public deferred)
   cli/        pry scan | verify-ownership | intake | verify-proof | report
@@ -81,10 +82,12 @@ tests/        offline; fixture apps under local sandbox control; no real third-p
 - **Response headers are an observation, not a verdict.** An opt-in `--headers` check makes one
   GET to `/` and reports missing/present recommended headers in the same unsigned section. It
   never becomes `EXPOSED` and is not signed; a CDN or proxy may set the headers.
-- **Local Level 2 writes are sandbox-only and marker-verified.** One declared POST/PUT/PATCH
-  runs with no credentials in the disposable sandbox, then a declared verification GET must
-  contain the fresh marker. Both pairs are captured; a rejected write or absent marker is
-  `NOT_REPRODUCED`. Live writes are rejected before any request.
+- **Level 2 writes are marker-verified.** One declared POST/PUT/PATCH runs with no
+  credentials, then a declared verification GET must contain the fresh marker. Both pairs
+  are captured; a rejected write or absent marker is `NOT_REPRODUCED`. Local runs use the
+  disposable sandbox. A live write requires a P1 token plus `--confirm` and
+  `--confirm-live-write`; it can alter real data, is not rolled back, and staging is
+  preferred.
 - **The missing-auth probe only requests declared paths.** The owner supplies path-only
   declarations; absolute URLs and protocol-relative paths are rejected on the host and in the
   sidecar. The result quotes the declaration and the response, not a global auth conclusion.

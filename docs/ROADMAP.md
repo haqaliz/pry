@@ -39,24 +39,25 @@ JSON without credentials are implemented for local repos. Configured live and lo
 implemented (two identities, two objects, 0600 config; the local config is mounted read-only).
 Opt-in header observations report missing/present recommended headers as an unsigned hardening
 observation. Endpoint discovery, IDOR discovery, and provider database/open-rule checks are
-not. M1.3 local and live read-only `pry scan` works; local levels 1–2 are implemented, live
-writes remain. M1.2 is done for local and live read-only findings — every `EXPOSED` writes an
-Ed25519-signed bundle; live replay remains P5. M1.4 is not started.
+not. M1.3 local and live read-only `pry scan` works; levels 1–2 are implemented local and
+live (live writes need extra confirmation). M1.2 is done for local and live findings — every
+`EXPOSED` writes an Ed25519-signed bundle; live replay remains P5. M1.4 is not started.
 
 ## Phase 2: Intensity levels and live targets (weeks 8-12)
 
 | # | Milestone | Done when |
 |---|---|---|
 | M2.1 | Live-target ownership flow | DNS/file verification works against a real domain, not just local fixtures |
-| M2.2 | Level 1 expanded read-only checks (P4) | Local SSRF + bounded local/live rate-limit observation; live SSRF/Level 2 deferred |
-| M2.3 | Level 2 write-based confirmation (P4) | Local sandbox write + verification read; live writes require an extra explicit step and are deferred |
+| M2.2 | Level 1 expanded read-only checks (P4) | Local SSRF + bounded local/live rate-limit observation; live SSRF deferred |
+| M2.3 | Level 2 write-based confirmation (P4) | Local sandbox write + verification read; live write requires a P1 token and an extra explicit confirmation; no rollback |
 | M2.4 | Findings corpus and report (P6) | Bank (target, probe, verdict, proof); local HTML report/corpus; hosted/public reports deferred |
 
 Phase 2 status (2026-11-11): M2.1 live read-only scan implemented with a P1 token; the
 real-domain manual check remains. M2.2 partial — local Level 1 SSRF and bounded local/live
 rate-limit observations implemented; live SSRF is not. M2.4 partial — local/live read-only
 HTML report and JSONL corpus implemented; hosted/public reports deferred. M2.3 partial —
-local Level 2 write confirmation implemented; live writes are not.
+declared Level 2 write confirmation implemented local and live; live writes need both
+confirmations and are not rolled back.
 
 ## Phase 3: Monetization experiment and platform integration (after the window)
 

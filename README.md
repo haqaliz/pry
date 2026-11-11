@@ -19,11 +19,11 @@ return 200 JSON with no credentials. P5 read-only signed proof bundles implement
 and live read-only EXPOSED findings. P6 local findings report and corpus implemented. Live
 read-only scans and configured live IDOR checks are implemented for URLs with a P1 token;
 configured local IDOR runs in the sandbox. Local Level 1 SSRF and bounded local/live
-rate-limit observations are implemented with `--confirm`. Local Level 2 write confirmation is
-implemented in the sandbox. Opt-in response header observations are implemented for local and
-live scans. IDOR discovery, provider database/open-rule checks, live write-based checks, live
-SSRF, live Level 2, and hosted/public reports are not started. A clean P3 result is
-`NOT_REPRODUCED`, never "secure."
+rate-limit observations are implemented with `--confirm`. Local and live Level 2 write
+confirmation is implemented (live needs an extra confirmation). Opt-in response header
+observations are implemented for local and live scans. IDOR discovery, provider
+database/open-rule checks, live SSRF, and hosted/public reports are not started. A clean P3
+result is `NOT_REPRODUCED`, never "secure."
 
 ## Ownership Verification (P1)
 
@@ -155,9 +155,9 @@ target; the token is the authorization.
   `--endpoint` paths; same verdict rules as a local scan.
 - Results are signed and reportable with `--report`; `--headers` adds an unsigned observation.
 - A missing, invalid, or wrong-target token exits 2 before any request.
-- Live SSRF and live write-based checks are not implemented; local Level 2 write
-  confirmation requires the sandbox. Live rate-limit is a bounded observation at level 1
-  with `--confirm`.
+- Live SSRF is not implemented. Live Level 2 writes require a P1 token plus `--confirm` and
+  `--confirm-live-write`, can alter real data, and are not rolled back; prefer staging. Live
+  rate-limit is a bounded observation at level 1 with `--confirm`.
 
 Live GETs are not zero-risk: a GET can trigger a webhook or cache. The user owns the target,
 and Pry keeps the request count minimal.
@@ -206,11 +206,18 @@ results, proofs, reports, logs, or errors.
 No discovery and no non-configured sweep. The result is about the declared object pair, not a
 global IDOR conclusion.
 
-## Level 2 Write Confirmation (local)
+## Level 2 Write Confirmation (local and live)
 
 ```bash
 chmod 600 write.json
 pry scan ./my-app --level 2 --confirm --write-config write.json
+```
+
+For a live target, the extra confirmation is required:
+
+```bash
+pry scan https://staging.example.com --token <token> --level 2 --confirm \
+  --confirm-live-write --write-config write.json
 ```
 
 The config declares one write that should require auth and one read that proves it landed:
@@ -231,9 +238,12 @@ the disposable sandbox, then GETs the verification path. `EXPOSED` only when the
 the write pair and the verification pair. A rejected write or an absent marker is
 `NOT_REPRODUCED`; a write 5xx or transport failure is `UNVERIFIED`.
 
-POST, PUT, and PATCH only; no DELETE, uploads, auth, or multi-step workflows. Local only:
-live writes are rejected, and a live URL with `--write-config` exits 2 before any request.
-The config is 0600, mounted read-only, and removed. Use test data, not real secrets.
+POST, PUT, and PATCH only; no DELETE, uploads, auth, or multi-step workflows. Local runs use
+the disposable sandbox. A live write requires a P1 token plus both `--confirm` and
+`--confirm-live-write`; it can alter real data, **there is no rollback**, and the live URL
+with `--write-config` exits 2 before any request unless both flags are present. Prefer a
+staging copy or a disposable test record. The config is 0600 and removed. Use test data, not
+real secrets.
 
 ## Response Header Observations
 
@@ -345,7 +355,7 @@ Pry's core architecture follows:
 
 1. **OWN** (Ownership verification) — P1 capability
 2. **INTAKE** (Target intake) — P2 local sandbox implemented; live read-only scans bypass it
-3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation + local Level 2 write confirmation
+3. **PROBE** (Security checks and exploitation) — P3 read-only + live read-only + live/local IDOR + database files + header observations; P4 Level 1 local SSRF + rate-limit observation + local/live Level 2 write confirmation
 4. **PROVE** (Proof capture) — P5 read-only signed bundles for local and live findings
 5. **REPORT** (Findings presentation) — P6 local report/corpus; hosted/public deferred
 
@@ -405,8 +415,12 @@ pry scan ./my-app --level 1 --confirm \
 pry scan https://example.com --token <token> --level 1 --confirm \
   --rate-limit-endpoint /login --rate-limit-count 3
 
-# Local Level 2 write confirmation (sandbox only, config must be 0600)
+# Level 2 write confirmation (local sandbox; config must be 0600)
 pry scan ./my-app --level 2 --confirm --write-config write.json
+
+# Live Level 2 write (extra confirmation; can alter real data, no rollback)
+pry scan https://staging.example.com --token <token> --level 2 --confirm \
+  --confirm-live-write --write-config write.json
 
 # Response header observation (hardening, not a verdict)
 pry scan ./my-app --headers
@@ -448,8 +462,9 @@ Pry implements a strict ownership gate with:
 8. Local Level 1 SSRF requires `--confirm`; the callback sidecar has no egress and a hit is
    the only EXPOSED condition. The rate-limit probe and header check are hardening
    observations, not verdicts. Live rate-limit is capped at five GETs, spaced 0.5s, and
-   stops on the first throttle. Local Level 2 writes run only against the disposable sandbox
-   with a verified marker; live writes and live SSRF are not implemented.
+   stops on the first throttle. Level 2 writes need a verification marker; local runs use the
+   disposable sandbox, live runs require both confirmations, can alter real data, and are not
+   rolled back. Live SSRF is not implemented.
 9. The P6 report/corpus are local-only; no upload, and the HTML is not signed evidence. The
    report shows hardening observations separately from verdicts.
 10. Absence of a reproduced finding is never reported as "secure".
