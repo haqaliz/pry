@@ -1,0 +1,20 @@
+name: Pry scan
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haqaliz/pry@v0.1.0
+        with:
+          target: .
+          out: pry-run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pry-run
+          path: pry-run

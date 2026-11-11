@@ -1,0 +1,41 @@
+name: Pry scan
+description: Run a local Pry read-only scan and fail the job on EXPOSED
+author: haqaliz
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  target:
+    description: Local repository path to scan
+    required: false
+    default: "."
+  args:
+    description: Extra pry scan arguments (for example --headers)
+    required: false
+    default: ""
+  out:
+    description: Run directory for results and proofs
+    required: false
+    default: "pry-run"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - shell: bash
+      run: pip install "${{ github.action_path }}"
+    - shell: bash
+      env:
+        PRY_TARGET: ${{ inputs.target }}
+        PRY_OUT: ${{ inputs.out }}
+        PRY_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        extra=()
+        if [ -n "$PRY_ARGS" ]; then
+          read -r -a extra <<< "$PRY_ARGS"
+        fi
+        pry scan "$PRY_TARGET" --out "$PRY_OUT" "${extra[@]}"
