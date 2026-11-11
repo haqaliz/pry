@@ -1,6 +1,8 @@
 # PRD — Live Level 2 Write Confirmation (P4 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Live Level 2 write confirmation implemented with
+  the extra confirmation; live SSRF, provider database/open-rule checks, and hosted reports are
+  deferred.
 - **Owner:** aliz
 - **Slug:** `live-writes`
 - **Capability:** P4 — live write confirmation with an extra explicit step
