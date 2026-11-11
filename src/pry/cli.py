@@ -20,6 +20,7 @@ from pry.own.errors import (
     UNSUPPORTED_TARGET,
     OwnershipError,
 )
+from pry import __version__
 from pry.own.target import Target, normalize_target
 from pry.own.tokens import TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
@@ -77,6 +78,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pry",
         description="Pry - Proves an app you own is exposed by actually trying the exploit",
+    )
+    parser.add_argument(
+        "--version", action="version", version="pry %s" % __version__
     )
     subparsers = parser.add_subparsers(dest="command")
 

@@ -252,3 +252,13 @@ def test_scan_rejects_non_integer_port():
     with pytest.raises(SystemExit) as exc:
         main(["scan", ".", "--port", "abc"])
     assert exc.value.code == 2
+
+
+def test_version_prints_the_package_version(capsys):
+    from pry import __version__
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+
+    assert exc.value.code == 0
+    assert __version__ in capsys.readouterr().out
