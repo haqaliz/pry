@@ -327,7 +327,7 @@ def _target_html(report: Report) -> str:
         ("Target", _target_basename(target.get("path", ""))),
         ("Kind", target.get("kind")),
     ]
-    if target.get("kind") == "live":
+    if target.get("kind") in ("live", "database"):
         rows.append(("URL", target.get("url") or target.get("path")))
         rows.append(("Ownership proof", target.get("ownership_proof")))
     else:
@@ -406,7 +406,7 @@ bundles are the evidence; this HTML file is not signed.</p>
 <h2>What this report does not claim</h2>
 <p><strong>No secure verdict.</strong> Pry does not certify this app as secure. NOT_REPRODUCED means a suspected issue could not be confirmed; it is not proof of absence. Absence of a reproduced finding is not a guarantee of safety.</p>
 <p><strong>What VALID means.</strong> VALID means the bundle's embedded key verified the signature. It is tamper-evidence, not proof of who created it; pin the fingerprint to trust a signer.</p>
-<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR discovery, provider database/open-rule checks, general authenticated scanning, live SSRF, and hosted reports are not implemented. Configured live and local IDOR checks, exposed database files, local Level 1 SSRF, bounded local/live rate-limit observations, opt-in header observations, and local/live Level 2 write confirmation are available.</p>
+<p><strong>Deferred checks.</strong> Endpoint discovery, IDOR discovery, general authenticated scanning, live SSRF, and hosted reports are not implemented. Configured live and local IDOR checks, exposed database files, provider database marker checks, local Level 1 SSRF, bounded local/live rate-limit observations, opt-in header observations, and local/live Level 2 write confirmation are available.</p>
 </section>
 <section>
 <h2>Target</h2>

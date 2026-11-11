@@ -553,3 +553,65 @@ def test_a_local_report_keeps_the_commit_rows_without_live_fields(tmp_path):
     assert COMMIT in html
     assert "Ownership proof" not in html
     assert "<dt>URL</dt>" not in html
+
+
+DATABASE_URL = "https://project.supabase.co"
+DATABASE_SANDBOX_ID = "db-0123456789ab"
+
+
+def _database_snapshot():
+    return {
+        "version": 1,
+        "sandbox_id": DATABASE_SANDBOX_ID,
+        "created_at": "2026-11-11T00:00:00Z",
+        "target": {
+            "path": DATABASE_URL,
+            "kind": "database",
+            "url": DATABASE_URL,
+            "ownership_proof": "database_marker",
+            "git_commit": None,
+            "git_dirty": None,
+            "tree_sha256": None,
+        },
+        "project": {},
+        "sandbox": {"network": "live", "internal_url": DATABASE_URL},
+        "result": {"status": "ready"},
+    }
+
+
+def _signed_database_run(tmp_path):
+    entries = [_entry("database_rules", EXPOSED)]
+    run_dir = _write_run(tmp_path, entries, _database_snapshot())
+    signer = ProofSigner()
+    bundle = build_bundle(
+        {
+            "sandbox_id": DATABASE_SANDBOX_ID,
+            "path": DATABASE_URL,
+            "kind": "database",
+            "url": DATABASE_URL,
+            "ownership_proof": "database_marker",
+        },
+        entries[0],
+        signer=signer,
+        created_at=CREATED_AT,
+    )
+    proof = write_bundle(run_dir, bundle)
+    entries[0]["proof"] = str(proof)
+    _write_results(run_dir, entries)
+    return run_dir, signer.fingerprint
+
+
+def test_a_database_report_shows_the_url_and_ownership_proof(tmp_path):
+    run_dir, fingerprint = _signed_database_run(tmp_path)
+
+    report = load_run(run_dir)
+    html = render_html(report)
+
+    assert report.target["kind"] == "database"
+    assert DATABASE_URL in html
+    assert "Ownership proof" in html
+    assert "database_marker" in html
+    assert fingerprint in html
+    assert "VALID" in html
+    assert "Commit" not in html
+    assert "Dirty" not in html

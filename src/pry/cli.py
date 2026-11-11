@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import secrets
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import List, Optional
 
 from pry.intake import intake
 from pry.intake.errors import IntakeError
+from pry.intake.snapshot import new_run_dir, utc_now, write_snapshot
 from pry.own.errors import (
     BAD_CHALLENGE,
     INTENSITY_INSUFFICIENT,
@@ -22,6 +24,12 @@ from pry.own.target import Target, normalize_target
 from pry.own.tokens import TokenSigner
 from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
+from pry.probe.database_rules import (
+    DATABASE_MARKER_CONFIRMATION_REQUIRED,
+    DatabaseError,
+    load_database_config,
+    probe_database_rules,
+)
 from pry.probe.idor import load_idor_config
 from pry.probe.live import scan_live
 from pry.probe.replay import (
@@ -36,7 +44,12 @@ from pry.probe.rate_limit import (
     RATE_LIMIT_DEFAULT_COUNT,
     validate_rate_limit,
 )
-from pry.probe.scan import scan_local, validate_endpoints
+from pry.probe.scan import (
+    SCAN_VERSION,
+    finalize_results,
+    scan_local,
+    validate_endpoints,
+)
 from pry.probe.ssrf import validate_ssrf
 from pry.probe.write import load_write_config
 from pry.proof import ProofError, load_bundle, verify_bundle
@@ -169,6 +182,30 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write an HTML findings report after a scan",
     )
+
+    database = subparsers.add_parser(
+        "database",
+        help="Check a declared Firebase RTDB or Supabase read path",
+    )
+    database.add_argument(
+        "--config",
+        required=True,
+        metavar="FILE",
+        help="0600 JSON config naming the provider, marker, and one data path",
+    )
+    database.add_argument(
+        "--confirm-marker",
+        action="store_true",
+        help=(
+            "Confirm the marker is a control attestation, not a DNS-grade "
+            "ownership proof"
+        ),
+    )
+    database.add_argument(
+        "--out",
+        help="Run directory for the check (default: ~/.pry/runs/db-<id>)",
+    )
+    database.add_argument("--json", action="store_true", help="Print JSON")
 
     report = subparsers.add_parser(
         "report", help="Generate a local HTML report from a run directory"
@@ -819,6 +856,104 @@ def cmd_scan(args) -> int:
     return _scan_target_url(args)
 
 
+def _database_snapshot(config, sandbox_id):
+    return {
+        "version": SCAN_VERSION,
+        "sandbox_id": sandbox_id,
+        "created_at": utc_now(),
+        "target": {
+            "path": config.url,
+            "kind": "database",
+            "url": config.url,
+            "ownership_proof": "database_marker",
+            "git_commit": None,
+            "git_dirty": None,
+            "tree_sha256": None,
+        },
+        "project": {
+            "package_manager": None,
+            "lockfile": None,
+            "lockfile_sha256": None,
+            "image": None,
+            "image_digest": None,
+            "install": None,
+            "build": None,
+            "start": None,
+            "port": None,
+        },
+        "sandbox": {
+            "network": "live",
+            "container_id": None,
+            "workspace": None,
+            "internal_url": config.url,
+        },
+        "result": {"status": "ready"},
+    }
+
+
+def cmd_database(args) -> int:
+    if not args.confirm_marker:
+        _print_error(
+            ProbeError(
+                DATABASE_MARKER_CONFIRMATION_REQUIRED,
+                "the marker is a control attestation you place in a database "
+                "you own, not a DNS-grade ownership proof; add "
+                "--confirm-marker to continue",
+            )
+        )
+        return 2
+
+    try:
+        config = load_database_config(args.config)
+        result = probe_database_rules(config)
+    except (ProbeError, DatabaseError) as exc:
+        _print_error(exc)
+        return 2
+
+    sandbox_id = "db-" + secrets.token_hex(6)
+    try:
+        if args.out is not None:
+            run_dir = new_run_dir(args.out)
+        else:
+            run_dir = new_run_dir(
+                Path.home() / ".pry" / "runs" / sandbox_id
+            )
+        snapshot = _database_snapshot(config, sandbox_id)
+        write_snapshot(run_dir, snapshot)
+        results, summary, results_path, corpus_error = finalize_results(
+            run_dir, snapshot, [ProbeResult(**result)]
+        )
+    except (IntakeError, ProbeError, ProofError) as exc:
+        _print_error(exc)
+        return 2
+
+    if corpus_error:
+        print(
+            "Warning: corpus not written: %s" % corpus_error,
+            file=sys.stderr,
+        )
+
+    proof = next(
+        (entry.proof for entry in results if entry.proof is not None), None
+    )
+    if args.json:
+        data = {
+            "results": [asdict(entry) for entry in results],
+            "summary": summary,
+            "results_path": str(results_path),
+        }
+        if proof is not None:
+            data["proof"] = proof
+        print(json.dumps(data, sort_keys=True, indent=2))
+    else:
+        for entry in results:
+            print(_probe_line(entry))
+        print("Results: %s" % results_path)
+        if proof is not None:
+            print("Proof: %s" % proof)
+    return 1 if summary[EXPOSED] else 0
+
+
 def cmd_intake(args) -> int:
     try:
         result = intake(
@@ -885,6 +1020,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_report(args)
     if args.command == "intake":
         return cmd_intake(args)
+    if args.command == "database":
+        return cmd_database(args)
     return cmd_scan(args)
 
 
