@@ -658,7 +658,7 @@ def _scan_target_path(args) -> int:
     try:
         outcome = scan_local(args.target, **kwargs)
     except (IntakeError, ProbeError, ProofError) as exc:
-        _print_error(exc)
+        _print_error(exc, args.json)
         return 2
 
     return _finish_scan(args, outcome)
@@ -899,7 +899,8 @@ def cmd_database(args) -> int:
                 "the marker is a control attestation you place in a database "
                 "you own, not a DNS-grade ownership proof; add "
                 "--confirm-marker to continue",
-            )
+            ),
+            args.json,
         )
         return 2
 
@@ -907,7 +908,7 @@ def cmd_database(args) -> int:
         config = load_database_config(args.config)
         result = probe_database_rules(config)
     except (ProbeError, DatabaseError) as exc:
-        _print_error(exc)
+        _print_error(exc, args.json)
         return 2
 
     sandbox_id = "db-" + secrets.token_hex(6)
@@ -924,7 +925,7 @@ def cmd_database(args) -> int:
             run_dir, snapshot, [ProbeResult(**result)]
         )
     except (IntakeError, ProbeError, ProofError) as exc:
-        _print_error(exc)
+        _print_error(exc, args.json)
         return 2
 
     if corpus_error:

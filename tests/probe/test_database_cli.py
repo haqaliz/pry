@@ -262,3 +262,20 @@ def test_a_marker_mismatch_exits_two_without_results(
     assert "configured marker not found" in out
     assert not run_dir.exists()
     assert not (run_dir / "results.json").exists()
+
+
+def test_json_errors_are_json(tmp_path, capsys):
+    code = main(
+        [
+            "database",
+            "--config",
+            str(tmp_path / "missing.json"),
+            "--confirm-marker",
+            "--json",
+        ]
+    )
+
+    assert code == 2
+    data = json.loads(capsys.readouterr().out)
+    assert data["status"] == "unverified"
+    assert data["cause"] == "DATABASE_CONFIG_INVALID"
