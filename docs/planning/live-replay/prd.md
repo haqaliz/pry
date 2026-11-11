@@ -1,6 +1,7 @@
 # PRD — Live Proof Replay (P5 remainder)
 
-- **Status:** Approved on standing instruction (2026-11-11)
+- **Status:** Merged to `master` (2026-11-11). Live read-only proof replay implemented;
+  local/write replay and key distribution remain deferred.
 - **Owner:** aliz
 - **Slug:** `live-replay`
 - **Capability:** P5 — live read-only proof replay
