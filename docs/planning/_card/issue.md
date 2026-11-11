@@ -1,53 +1,53 @@
-# Live Level 2 Write Confirmation (P4 remainder)
+# Live Proof Replay (P5 remainder)
 
 - **Type:** feat
-- **Slug:** `live-writes`
+- **Slug:** `live-replay`
 - **Owner:** aliz
 - **Source:** inline brief. No GitHub issue.
-- **Capability:** P4 — live write confirmation with an extra explicit confirmation.
+- **Capability:** P5 — replay a signed read-only proof against its P1-verified live target.
 
 ## Brief
 
-Local Level 2 writes are implemented. The live path still rejects writes. Constraint 6 permits
-a live write only when the owner explicitly raises the intensity with a full warning; the
-roadmap requires an extra step beyond the standard confirmation. This slice adds
-`--confirm-live-write`: one declared POST/PUT/PATCH against a P1-verified origin, a unique
-marker, and a verification read. It is still signed only when the write is 2xx and the marker is
-read back.
+A signed proof is only useful if the owner can check that the saved request still reproduces.
+`pry replay BUNDLE --token TOKEN` verifies the bundle, proves ownership of the live target
+again, re-sends the recorded GET with no credentials and no redirects, and reports whether the
+response status still matches. It is a replay check, not a new verdict or proof.
 
 ## Flow
 
 ```bash
-chmod 600 write.json
-pry scan https://staging.example.com --token <token> \
-  --level 2 --confirm --confirm-live-write --write-config write.json
+pry replay ~/.pry/runs/<id>/proofs/<bundle_id>.json \
+  --token <token>
 ```
 
-The write runs from the host in-process, not in a sandbox. Use a staging copy or a disposable
-test record; Pry does not roll back a live write.
+Output: `MATCH`, `MISMATCH`, or `UNVERIFIED`, with the recorded and replay statuses. Exit 0
+match, 1 mismatch, 2 invalid/unverified.
 
 ## Scope
 
-- Live `--level 2 --confirm --confirm-live-write --write-config FILE` + P1 token.
-- Same config and marker verification as local Level 2.
-- One write + one verification GET; no DELETE, uploads, auth, or multi-step workflows.
-- `EXPOSED` only for write 2xx + verify 2xx + marker; signed and reportable.
-- The extra flag is required; without it the live write exits 2 before any request.
-- Tests: live scan, CLI gate, loopback integration, no real third-party target.
-- Docs/ETHICS: full warning, staging preference, no rollback, live write risk.
+- Valid signed bundle required; optional `--fingerprint` pin.
+- Live target only; finding method GET only; same-origin request URL.
+- P1 token for the bundle target, validated before any request.
+- Re-send only `User-Agent`/`Accept` from the recorded headers; no auth/cookie/API key.
+- No redirects, 5s timeout, 4 KiB cap.
+- Status-only comparison; probe-specific conditions are not re-evaluated.
+- `--json`; no new proof, no token stored.
+- Tests: loopback match/mismatch/transport, invalid bundle, non-live, non-GET, wrong token,
+  header filtering, JSON.
+- Docs: what replay does and does not prove.
 
 ## Out of scope
 
-- DELETE, uploads, auth, multi-step workflows, rollback.
+- Local/sandbox replay, write replay, probe-specific re-evaluation, new proof signing.
 - IDOR discovery, provider DB rules, live SSRF, hosted reports.
-- Writing to a target without a P1 token.
 
 ## Acceptance criteria
 
-- Live level 2 + token + both confirmations + config → one `write` result.
-- Write 201 + verify 200 marker → EXPOSED, signed, report.
-- Write 401/403/404 or marker absent → NOT_REPRODUCED.
-- Missing `--confirm-live-write` → exit 2, no request.
-- Missing token / invalid config / SSRF flags → exit 2, no request.
-- No DELETE; no config path in outputs.
-- Docs state staging preference, no rollback, and the live write risk.
+- Valid live GET proof + correct token + same status → MATCH, exit 0.
+- Different status → MISMATCH, exit 1.
+- Transport failure → UNVERIFIED, exit 2.
+- Invalid bundle/fingerprint → exit 2, no request.
+- Local bundle, non-GET finding, or foreign request URL → exit 2, no request.
+- Wrong-target/missing token → exit 2, no request.
+- Authorization/Cookie are never sent; token never stored.
+- No "secure" claim.
