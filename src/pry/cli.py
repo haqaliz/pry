@@ -24,6 +24,12 @@ from pry.own.verify import METHODS, new_challenge, verify_target
 from pry.probe import EXPOSED, ProbeError, ProbeResult, summarize
 from pry.probe.idor import load_idor_config
 from pry.probe.live import scan_live
+from pry.probe.replay import (
+    MATCH as REPLAY_MATCH,
+    MISMATCH as REPLAY_MISMATCH,
+    ReplayError,
+    replay_bundle,
+)
 from pry.probe.rate_limit import (
     LIVE_RATE_LIMIT_DEFAULT_COUNT,
     LIVE_RATE_LIMIT_MAX_COUNT,
@@ -184,6 +190,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Expected sha256:... fingerprint to pin",
     )
     verify_proof.add_argument("--json", action="store_true", help="Print JSON")
+
+    replay_parser = subparsers.add_parser(
+        "replay", help="Replay a signed read-only proof against its live target"
+    )
+    replay_parser.add_argument(
+        "file", help="Path to a proof bundle JSON file"
+    )
+    replay_parser.add_argument(
+        "--fingerprint", help="Expected sha256:... fingerprint to pin"
+    )
+    replay_parser.add_argument(
+        "--token", help="Ownership token for the bundle target"
+    )
+    replay_parser.add_argument(
+        "--token-file", help="Read the ownership token from a file"
+    )
+    replay_parser.add_argument("--json", action="store_true", help="Print JSON")
 
     intake_parser = subparsers.add_parser(
         "intake", help="Boot a local repository in a Docker sandbox"
@@ -347,6 +370,53 @@ def cmd_verify_proof(args) -> int:
     print("Verdict: %s" % finding.get("verdict"))
     print("Target: %s (%s)" % (target.get("path"), target.get("kind")))
     return 0
+
+
+def cmd_replay(args) -> int:
+    try:
+        bundle = load_bundle(args.file)
+        payload, fingerprint = verify_bundle(
+            bundle, expected_fingerprint=args.fingerprint
+        )
+        token = _resolve_token(args)
+        result = replay_bundle(payload, token)
+    except (ProofError, OwnershipError, ReplayError) as exc:
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "status": "unverified",
+                        "cause": exc.cause,
+                        "message": exc.message,
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            print("UNVERIFIED: %s: %s" % (exc.cause, exc.message))
+        return 2
+
+    if args.json:
+        data = dict(result)
+        data["fingerprint"] = fingerprint
+        print(json.dumps(data, sort_keys=True))
+    else:
+        print("%s: %s" % (result["status"], result["message"]))
+        print("Fingerprint: %s" % fingerprint)
+        print("Probe: %s" % result.get("probe"))
+        print("Target: %s" % result.get("target"))
+        if result.get("cause"):
+            print("Cause: %s" % result["cause"])
+        if "recorded_status" in result:
+            print("Recorded status: %s" % result["recorded_status"])
+        if "replay_status" in result:
+            print("Replay status: %s" % result["replay_status"])
+
+    if result["status"] == REPLAY_MATCH:
+        return 0
+    if result["status"] == REPLAY_MISMATCH:
+        return 1
+    return 2
 
 
 def cmd_report(args) -> int:
@@ -809,6 +879,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_verify(args)
     if args.command == "verify-proof":
         return cmd_verify_proof(args)
+    if args.command == "replay":
+        return cmd_replay(args)
     if args.command == "report":
         return cmd_report(args)
     if args.command == "intake":
