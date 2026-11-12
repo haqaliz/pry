@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pry — prove the exposure, not the pattern</title>
+<meta name="description" content="Pry proves an app you own is exposed by actually trying the exploit, then captures a signed, replayable proof. Ownership-gated, read-only by default.">
+<meta name="theme-color" content="#0b1116">
+<meta property="og:title" content="Pry — prove the exposure, not the pattern">
+<meta property="og:description" content="Reproduce the exploit. Capture the signed proof. Ownership-gated, read-only by default.">
+<meta property="og:image" content="https://haqaliz.github.io/pry/assets/social-card.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/pry-logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-head">
+  <div class="wrap head-inner">
+    <a class="brand" href="#top">
+      <img class="brand-mark" src="assets/pry-mark.svg" alt="" width="30" height="28">
+      <span>Pry</span>
+    </a>
+    <nav aria-label="Primary">
+      <ul class="nav">
+        <li><a href="#why">Why</a></li>
+        <li><a href="#checks">Checks</a></li>
+        <li><a href="#verdicts">Verdicts</a></li>
+        <li><a href="#demo">Demo</a></li>
+        <li><a href="#status">Status</a></li>
+        <li><a href="https://github.com/haqaliz/pry">GitHub</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap hero-inner">
+      <img class="hero-mark" src="assets/pry-mark.svg" alt="Pry logo" width="120" height="110">
+      <p class="chip">v0.1.0 · public beta</p>
+      <h1 id="hero-title">Pry</h1>
+      <p class="tagline">Prove it. Don't guess it.</p>
+      <p class="lede">Pry proves an app you own is exposed by <strong>actually trying the exploit</strong>, then captures a signed, replayable request/response pair. No pattern-matching verdicts. No "secure" claim.</p>
+
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/haqaliz/pry">View on GitHub</a>
+        <a class="btn" href="https://github.com/haqaliz/pry/releases/tag/v0.1.0">Latest release</a>
+        <a class="btn" href="https://github.com/haqaliz/pry/blob/master/docs/README.md">Docs</a>
+      </div>
+
+      <div class="terminal">
+        <p class="terminal-bar"><span class="tick" aria-hidden="true"></span>quickstart</p>
+        <pre tabindex="0" aria-label="Install and quickstart commands"><code><span class="c"># install the released CLI (PyPI package: pry-scanner)</span>
+uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"
+
+<span class="c"># local repo in a disposable Docker sandbox</span>
+pry scan ./my-app --report
+
+<span class="c"># verify a signed proof offline</span>
+pry verify-proof ~/.pry/runs/&lt;id&gt;/proofs/&lt;bundle&gt;.json</code></pre>
+      </div>
+      <p class="fine">Docker is required for local intake. A live URL needs a P1 ownership token first.</p>
+    </div>
+  </section>
+
+  <section id="why" aria-labelledby="why-title">
+    <div class="wrap">
+      <p class="step"><span class="step-num">01</span> Why</p>
+      <h2 id="why-title">The exploit is the verdict.</h2>
+      <p class="body">Most scanners say an endpoint <em>looks</em> risky. Pry makes the request that should have been blocked, captures what came back, and signs it. A heuristic may prioritize; only a reproduced pair may produce <code>EXPOSED</code>.</p>
+
+      <div class="cards">
+        <article class="card">
+          <h3>Execute, don't infer</h3>
+          <p>A real GET, POST, or fetch against a target you own. If it did not reproduce, the result is <code>NOT_REPRODUCED</code>, never "safe".</p>
+        </article>
+        <article class="card">
+          <h3>Proof, not a screenshot</h3>
+          <p>Every <code>EXPOSED</code> finding gets an Ed25519-signed bundle with the redacted request/response pair, a target snapshot, and a fingerprint you can pin.</p>
+        </article>
+        <article class="card">
+          <h3>Ownership before requests</h3>
+          <p>DNS TXT or a well-known file gates live scans. Local repos run in an isolated sandbox with no run-phase egress. Higher intensity needs explicit confirmation.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="checks" aria-labelledby="checks-title">
+    <div class="wrap">
+      <p class="step"><span class="step-num">02</span> What it checks</p>
+      <h2 id="checks-title">A graduated set, declared by the owner.</h2>
+      <p class="body">No route discovery by guessing. You declare the protected paths, object pairs, and endpoints. Pry reproduces the check and reports only what it could capture.</p>
+
+      <ul class="checks">
+        <li><strong>Missing auth</strong><span>A declared protected path returns 2xx JSON with no credentials.</span></li>
+        <li><strong>Configured IDOR</strong><span>Two identities, two objects, both controls, and an A→B cross-request.</span></li>
+        <li><strong>SSRF</strong><span>Local callback sidecar or a live user-owned callback; only a hit is <code>EXPOSED</code>.</span></li>
+        <li><strong>Rate limits</strong><span>A bounded local/live observation. Never a verdict; stops on the first throttle.</span></li>
+        <li><strong>Headers</strong><span>Opt-in missing/present recommended headers. Unsigned, hardening-only.</span></li>
+        <li><strong>Secrets and files</strong><span>Fixed secret paths and served SQLite/SQL dumps with a signature excerpt only.</span></li>
+        <li><strong>Provider DB rules</strong><span>Firebase RTDB and Supabase with a user-placed marker and one declared data path.</span></li>
+        <li><strong>Level 2 writes</strong><span>One declared write plus a marker verification read; live writes need an extra confirmation.</span></li>
+        <li><strong>Proof and report</strong><span>Signed bundles, offline verification, read-only replay, HTML report, JSONL corpus.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="verdicts" aria-labelledby="verdicts-title">
+    <div class="wrap">
+      <p class="step"><span class="step-num">03</span> The verdicts</p>
+      <h2 id="verdicts-title">There is no safe verdict.</h2>
+
+      <ul class="verdicts">
+        <li class="verdict verdict-exposed">
+          <span class="verdict-name">EXPOSED</span>
+          <p>A real exploit was reproduced at or below the authorized intensity. The proof bundle is the evidence.</p>
+        </li>
+        <li class="verdict verdict-not">
+          <span class="verdict-name">NOT_REPRODUCED</span>
+          <p>The declared check did not reproduce. Absence of proof is not proof of absence.</p>
+        </li>
+        <li class="verdict verdict-unverified">
+          <span class="verdict-name">UNVERIFIED</span>
+          <p>Pry could not test: ownership unproven, target unreachable, or the intensity was too low.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="demo" aria-labelledby="demo-title">
+    <div class="wrap">
+      <p class="step"><span class="step-num">04</span> In action</p>
+      <h2 id="demo-title">A real local run.</h2>
+      <p class="body">The vulnerable fixture produces four findings, writes signed proofs, and opens an HTML report. This is a real terminal capture, not a mockup.</p>
+
+      <figure class="demo">
+        <video controls autoplay loop muted playsinline poster="assets/pry-demo-scan.png" width="1400" height="760">
+          <source src="assets/pry-demo.mp4" type="video/mp4">
+          <img src="assets/pry-demo-scan.png" alt="A real Pry terminal session: four EXPOSED findings from the local fixture, a report path, and a valid signed proof." width="1400" height="760">
+        </video>
+        <figcaption>Four <code>EXPOSED</code> findings, an HTML report, and a proof that verifies offline.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="status" aria-labelledby="status-title">
+    <div class="wrap">
+      <p class="step"><span class="step-num">05</span> Status &amp; limits</p>
+      <h2 id="status-title">Public beta, honest scope.</h2>
+
+      <div class="limits">
+        <article>
+          <h3>In 0.1.0</h3>
+          <p>Ownership gate, local sandbox, read-only floor, configured IDOR, local/live SSRF, rate-limit observations, headers, database files, provider DB rules, local/live Level 2 writes, signed proofs, replay, report, and corpus.</p>
+        </article>
+        <article>
+          <h3>Not in 0.1.0</h3>
+          <p>IDOR and endpoint discovery, hosted reports, and platform partnerships. Discovery by guessing is deliberately out of scope.</p>
+        </article>
+        <article>
+          <h3>Safety model</h3>
+          <p>Live targets need ownership proof. Read-only is the default. Level 1 and Level 2 need explicit confirmation. Credentials are 0600 and redacted. Live writes can alter real data and are not rolled back.</p>
+        </article>
+        <article>
+          <h3>License</h3>
+          <p>Apache-2.0. Self-hostable OSS; no upload or telemetry by default. The proof key stays local.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="install" aria-labelledby="install-title">
+    <div class="wrap">
+      <p class="step"><span class="step-num">06</span> Install</p>
+      <h2 id="install-title">One command, then scan.</h2>
+
+      <div class="terminal">
+        <p class="terminal-bar"><span class="tick" aria-hidden="true"></span>install</p>
+        <pre tabindex="0" aria-label="Install commands"><code><span class="c"># from the v0.1.0 tag (works now)</span>
+uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"
+
+<span class="c"># local repo, read-only floor</span>
+pry scan ./my-app --report
+
+<span class="c"># live target: prove ownership first</span>
+pry verify-ownership https://your-app.example --method dns
+pry scan https://your-app.example --token &lt;token&gt;</code></pre>
+      </div>
+
+      <p class="body">Read the <a href="https://github.com/haqaliz/pry/blob/master/README.md">README</a>,
+      <a href="https://github.com/haqaliz/pry/blob/master/docs/technical/ARCHITECTURE.md">architecture</a>,
+      <a href="https://github.com/haqaliz/pry/blob/master/docs/ROADMAP.md">roadmap</a>, and
+      <a href="https://github.com/haqaliz/pry/blob/master/ETHICS.md">ethics</a>.
+      For a vulnerability in Pry itself, use the
+      <a href="https://github.com/haqaliz/pry/security/advisories/new">private advisory</a>.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="wrap foot-inner">
+    <p><a href="https://github.com/haqaliz/pry">github.com/haqaliz/pry</a> · <a href="https://github.com/haqaliz/pry/blob/master/LICENSE">Apache-2.0</a> · v0.1.0</p>
+    <p class="fine">No analytics, no cookies, no third-party requests. The logo and demo are local assets.</p>
+  </div>
+</footer>
+
+</body>
+</html>
