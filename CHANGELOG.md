@@ -4,11 +4,19 @@ All notable changes to Pry are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-11-13
 
 ### Added
 
+- First PyPI release as `pry-scanner`: `uv tool install pry-scanner`.
 - Project logo, terminal demo GIF/MP4, and a GitHub Pages landing page.
+- Public contributing guide, code of conduct, issue and pull request templates, and docs index.
+
+### Changed
+
+- The release workflow publishes the exact wheel and sdist built and tested by CI, using PyPI
+  trusted publishing.
+- Public README, roadmap, FAQ, and GitHub metadata polished for review.
 
 ## [0.1.0] - 2026-11-12
 
@@ -54,4 +62,5 @@ First public release. PyPI package: `pry-scanner`; CLI: `pry`.
 - Hosted/public reports and platform partnerships (P7).
 - A published real-world case study (M1.4).
 
+[0.1.1]: https://github.com/haqaliz/pry/releases/tag/v0.1.1
 [0.1.0]: https://github.com/haqaliz/pry/releases/tag/v0.1.0

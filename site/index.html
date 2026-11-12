@@ -41,21 +41,21 @@
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap hero-inner">
       <img class="hero-mark" src="assets/pry-mark.svg" alt="Pry logo" width="120" height="110">
-      <p class="chip">v0.1.0 · public beta</p>
+      <p class="chip">v0.1.1 · public beta</p>
       <h1 id="hero-title">Pry</h1>
       <p class="tagline">Prove it. Don't guess it.</p>
       <p class="lede">Pry proves an app you own is exposed by <strong>actually trying the exploit</strong>, then captures a signed, replayable request/response pair. No pattern-matching verdicts. No "secure" claim.</p>
 
       <div class="actions">
         <a class="btn btn-primary" href="https://github.com/haqaliz/pry">View on GitHub</a>
-        <a class="btn" href="https://github.com/haqaliz/pry/releases/tag/v0.1.0">Latest release</a>
+        <a class="btn" href="https://github.com/haqaliz/pry/releases/tag/v0.1.1">Latest release</a>
         <a class="btn" href="https://github.com/haqaliz/pry/blob/master/docs/README.md">Docs</a>
       </div>
 
       <div class="terminal">
         <p class="terminal-bar"><span class="tick" aria-hidden="true"></span>quickstart</p>
         <pre tabindex="0" aria-label="Install and quickstart commands"><code><span class="c"># install the released CLI (PyPI package: pry-scanner)</span>
-uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"
+uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"
 
 <span class="c"># local repo in a disposable Docker sandbox</span>
 pry scan ./my-app --report
@@ -155,11 +155,11 @@ pry verify-proof ~/.pry/runs/&lt;id&gt;/proofs/&lt;bundle&gt;.json</code></pre>
 
       <div class="limits">
         <article>
-          <h3>In 0.1.0</h3>
+          <h3>In 0.1.1</h3>
           <p>Ownership gate, local sandbox, read-only floor, configured IDOR, local/live SSRF, rate-limit observations, headers, database files, provider DB rules, local/live Level 2 writes, signed proofs, replay, report, and corpus.</p>
         </article>
         <article>
-          <h3>Not in 0.1.0</h3>
+          <h3>Not in 0.1.1</h3>
           <p>IDOR and endpoint discovery, hosted reports, and platform partnerships. Discovery by guessing is deliberately out of scope.</p>
         </article>
         <article>
@@ -181,8 +181,8 @@ pry verify-proof ~/.pry/runs/&lt;id&gt;/proofs/&lt;bundle&gt;.json</code></pre>
 
       <div class="terminal">
         <p class="terminal-bar"><span class="tick" aria-hidden="true"></span>install</p>
-        <pre tabindex="0" aria-label="Install commands"><code><span class="c"># from the v0.1.0 tag (works now)</span>
-uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"
+        <pre tabindex="0" aria-label="Install commands"><code><span class="c"># from the v0.1.1 tag</span>
+uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"
 
 <span class="c"># local repo, read-only floor</span>
 pry scan ./my-app --report
@@ -205,7 +205,7 @@ pry scan https://your-app.example --token &lt;token&gt;</code></pre>
 
 <footer class="site-foot">
   <div class="wrap foot-inner">
-    <p><a href="https://github.com/haqaliz/pry">github.com/haqaliz/pry</a> · <a href="https://github.com/haqaliz/pry/blob/master/LICENSE">Apache-2.0</a> · v0.1.0</p>
+    <p><a href="https://github.com/haqaliz/pry">github.com/haqaliz/pry</a> · <a href="https://github.com/haqaliz/pry/blob/master/LICENSE">Apache-2.0</a> · v0.1.1</p>
     <p class="fine">No analytics, no cookies, no third-party requests. The logo and demo are local assets.</p>
   </div>
 </footer>

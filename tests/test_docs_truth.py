@@ -432,13 +432,14 @@ def test_roadmap_provider_database_status():
 def test_readme_release_install_is_honest():
     text = " ".join(_read("README.md").split())
     assert "pry-scanner" in text
-    assert "v0.1.0" in text
+    assert "v0.1.1" in text
     assert "CI / Pre-Publish" in text
-    assert "haqaliz/pry@v0.1.0" in text
+    assert "haqaliz/pry@v0.1.1" in text
 
 
 def test_changelog_records_the_release():
     text = " ".join(_read("CHANGELOG.md").split())
+    assert "## [0.1.1] - 2026-11-13" in text
     assert "## [0.1.0] - 2026-11-12" in text
     assert "pry-scanner" in text
     assert "Not in 0.1.0" in text
@@ -464,6 +465,7 @@ def test_readme_public_sections_are_present():
     assert "What Pry never claims" in text
     assert "At a glance" in text
     assert "pry-scanner" in text
+    assert "v0.1.1" in text
     assert "actions/workflows/ci.yml/badge.svg" in text
 
 
@@ -483,7 +485,7 @@ def test_code_of_conduct_exists():
 
 def test_public_roadmap_has_next_and_not_doing():
     text = " ".join(_read("docs/ROADMAP.md").split())
-    assert "Status at v0.1.0" in text
+    assert "Status at v0.1.1" in text
     assert "Next." in text
     assert "Deliberately not doing" in text
     assert "Owner-approved discovery" in text

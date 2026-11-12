@@ -29,7 +29,7 @@ body:
     attributes:
       label: Pry version
       description: Output of `pry --version`.
-      placeholder: pry 0.1.0
+      placeholder: pry 0.1.1
     validations:
       required: true
   - type: input

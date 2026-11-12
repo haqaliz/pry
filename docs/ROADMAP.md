@@ -6,7 +6,7 @@ as the fallback. Stack: Python via `uv`.
 
 Milestone order is my proposal; reorder freely.
 
-## Status at v0.1.0 (2026-11-12)
+## Status at v0.1.1 (2026-11-13)
 
 **Shipped.** Ownership gate (P1), local sandbox intake (P2), read-only floor probes and declared
 missing-auth, configured live/local IDOR, local/live Level 1 SSRF, local/live rate-limit

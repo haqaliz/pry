@@ -50,18 +50,17 @@ Trusted publishing is used; there is no long-lived token in GitHub.
 
 The PyPI name `pry` is taken. Do not change the distribution name to `pry`.
 
-### First publish (v0.1.0 caveat)
+### First publish (v0.1.1)
 
-The `v0.1.0` tag predates the artifact-handoff workflow fix. Either:
+`v0.1.0` was not published to PyPI. `v0.1.1` is the first release through trusted publishing.
+If a future tag predates a workflow fix, upload manually once:
 
-- upload 0.1.0 manually once:
-  ```bash
-  uv build
-  uvx twine upload dist/*   # TWINE_USERNAME=__token__, TWINE_PASSWORD=pypi-...
-  ```
-- or bump to `0.1.1` and push a new `v0.1.1` tag, which uses the fixed workflow.
+```bash
+uv build
+uvx twine upload dist/*   # TWINE_USERNAME=__token__, TWINE_PASSWORD=pypi-...
+```
 
-Future releases use the tag workflow. Manual upload is only the fallback.
+Manual upload is only the fallback; tags use the workflow.
 
 ### Manual upload
 

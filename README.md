@@ -14,7 +14,7 @@ captures a signed, replayable request/response pair. Read-only by default.
 [![License](https://img.shields.io/github/license/haqaliz/pry)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](pyproject.toml)
 
-v0.1.0 · [website](https://haqaliz.github.io/pry/) · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [release checklist](docs/RELEASE.md)
+v0.1.1 · [website](https://haqaliz.github.io/pry/) · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [release checklist](docs/RELEASE.md)
 
 <img src="assets/pry-demo.gif" alt="A real local Pry run: four EXPOSED findings, an HTML report, and a valid signed proof." width="820" />
 
@@ -27,7 +27,7 @@ v0.1.0 · [website](https://haqaliz.github.io/pry/) · [changelog](CHANGELOG.md)
 | | |
 |---|---|
 | **What it proves** | An exposure you can reproduce, not a pattern that looks risky. |
-| **Install** | `uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"` |
+| **Install** | `uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"` |
 | **First scan** | `pry scan ./your-app` (local sandbox) or `pry scan https://your-app.example --token <token>` |
 | **Architecture** | [own → intake → probe → prove → report](docs/technical/ARCHITECTURE.md) |
 | **Roadmap** | [shipped, next, later](docs/ROADMAP.md) |
@@ -39,10 +39,10 @@ v0.1.0 · [website](https://haqaliz.github.io/pry/) · [changelog](CHANGELOG.md)
 
 | | |
 |---|---|
-| **Release** | v0.1.0 (2026-11-12) |
+| **Release** | v0.1.1 (2026-11-13) |
 | **Runtime** | Python 3.9+, Docker for local intake |
-| **In 0.1.0** | Read-only floor, Level 1 SSRF and rate limits, Level 2 writes, provider DB checks, signed proofs, replay, report |
-| **Not in 0.1.0** | IDOR/endpoint discovery, hosted reports, platform partnerships |
+| **In 0.1.1** | Read-only floor, Level 1 SSRF and rate limits, Level 2 writes, provider DB checks, signed proofs, replay, report |
+| **Not in 0.1.1** | IDOR/endpoint discovery, hosted reports, platform partnerships |
 | **Safety** | Ownership proof before live requests; read-only by default; explicit confirmation above Level 0 |
 | **Stability** | 0.1.x beta; CLI flags and result shapes may change before 1.0 |
 
@@ -536,8 +536,8 @@ Requires Python 3.9+ and Docker for local intake. The PyPI distribution is
 **`pry-scanner`**; the installed command is **`pry`**.
 
 ```bash
-# Install from the v0.1.0 GitHub tag (works now)
-uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"
+# Install from the v0.1.1 GitHub tag
+uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"
 
 # Once the PyPI project is published
 uv tool install pry-scanner
@@ -635,7 +635,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: haqaliz/pry@v0.1.0
+      - uses: haqaliz/pry@v0.1.1
         with:
           target: .
           out: pry-run

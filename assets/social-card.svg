@@ -25,5 +25,5 @@
   </g>
   <text x="80" y="520" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#9fb0bc">Ownership-gated. Read-only by default. Signed, replayable proof.</text>
   <text x="80" y="558" font-family="Menlo, Consolas, monospace" font-size="17" fill="#ff4d4f">github.com/haqaliz/pry</text>
-  <text x="80" y="590" font-family="Helvetica, Arial, sans-serif" font-size="15" fill="#66757f">Apache-2.0  ·  Python 3.9+  ·  v0.1.0</text>
+  <text x="80" y="590" font-family="Helvetica, Arial, sans-serif" font-size="15" fill="#66757f">Apache-2.0  ·  Python 3.9+  ·  v0.1.1</text>
 </svg>
