@@ -30,19 +30,40 @@ command is still **`pry`**.
 The tag triggers `.github/workflows/release.yml`, which runs the tests, builds the wheel and
 sdist, and creates or updates the GitHub release with generated notes and the artifacts.
 
-## PyPI (optional, one-time setup)
+## PyPI (one-time setup)
 
-Trusted publishing is used; there is no long-lived token.
+Trusted publishing is used; there is no long-lived token in GitHub.
 
-1. On PyPI, create the project `pry-scanner` and configure a trusted publisher for:
-   - owner: `haqaliz`
-   - repository: `pry`
-   - workflow: `release.yml`
-   - environment: `pypi`
-2. In the GitHub repository, create an environment named `pypi`.
-3. Add a repository variable `PYPI_PUBLISH` with value `true`.
+1. On PyPI, open <https://pypi.org/manage/account/publishing/> and add a **pending trusted
+   publisher** for a new project. PyPI creates the project on the first publish.
+   - PyPI project name: `pry-scanner`
+   - Owner: `haqaliz`
+   - Repository name: `pry`
+   - Workflow name: `release.yml`
+   - Environment name: `pypi`
+2. In GitHub, open **Settings → Environments → New environment** and create `pypi`. No secret
+   is required. Optionally add required reviewers.
+3. In **Settings → Secrets and variables → Actions → Variables**, add `PYPI_PUBLISH` with value
+   `true`.
+4. Push a tag `vX.Y.Z`. The `pypi` job is skipped unless `PYPI_PUBLISH` is `true`. It publishes
+   the exact wheel and sdist built and tested by the `build` job.
 
-The `pypi` job is skipped unless that variable is `true`. To publish manually:
+The PyPI name `pry` is taken. Do not change the distribution name to `pry`.
+
+### First publish (v0.1.0 caveat)
+
+The `v0.1.0` tag predates the artifact-handoff workflow fix. Either:
+
+- upload 0.1.0 manually once:
+  ```bash
+  uv build
+  uvx twine upload dist/*   # TWINE_USERNAME=__token__, TWINE_PASSWORD=pypi-...
+  ```
+- or bump to `0.1.1` and push a new `v0.1.1` tag, which uses the fixed workflow.
+
+Future releases use the tag workflow. Manual upload is only the fallback.
+
+### Manual upload
 
 ```bash
 uv build
@@ -56,6 +77,9 @@ uv tool install pry-scanner
 pry --version
 pry --help
 ```
+
+After the first PyPI publish, move `uv tool install pry-scanner` above the GitHub-tag install in
+the README.
 
 Or from the GitHub tag before PyPI is configured:
 
