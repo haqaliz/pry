@@ -505,3 +505,14 @@ def test_issue_and_pr_templates_exist():
         ".github/PULL_REQUEST_TEMPLATE.md",
     ):
         assert (ROOT / relative).is_file()
+
+
+def test_readme_faq_is_honest():
+    text = " ".join(_read("README.md").split())
+    assert "## FAQ" in text
+    assert "Is a clean scan" in text
+    assert "No. Pry has no safe verdict." in text
+    assert "Does it upload my code or data?" in text
+    assert "No. The sandbox and proofs are local" in text
+    assert "Does it discover endpoints?" in text
+    assert "Discovery" in text

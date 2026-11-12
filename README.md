@@ -40,6 +40,32 @@ v0.1.0 · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [releas
 - No route or object discovery by guessing.
 - No hardening check dressed up as `EXPOSED`. Missing headers and rate limits are observations.
 
+## FAQ
+
+**Is a clean scan "secure"?** No. Pry has no safe verdict. A clean result is `NOT_REPRODUCED`,
+which means the declared checks did not reproduce; it is not proof of absence.
+
+**Does Pry attack third-party apps?** No. A live target needs an ownership token. Local repos
+are owned by definition and run only in the sandbox.
+
+**Does it upload my code or data?** No. The sandbox and proofs are local; there is no upload,
+telemetry, or hosted service by default.
+
+**What targets are supported?** Static sites, npm-based Node/Next apps, and live URLs with
+proof of ownership. Firebase RTDB and Supabase have a separate marker check.
+
+**Does it discover endpoints?** No. You declare the protected paths and object pairs. Discovery
+by guessing is deliberately out of scope.
+
+**What does `EXPOSED` mean?** Pry captured a request/response pair that demonstrates the issue
+at or below the authorized intensity. A heuristic may prioritize; execution decides.
+
+**Can I run it in CI?** Yes. The repository ships a composite GitHub Action for local scans; a
+finding fails the job. See [CI / Pre-Publish](#ci--pre-publish).
+
+**Where are the proofs?** Every `EXPOSED` finding gets an Ed25519 bundle under the run
+directory. `pry verify-proof` checks it offline; `pry replay` re-sends a read-only live proof.
+
 ## Documentation
 
 [Docs index](docs/README.md) · [Architecture](docs/technical/ARCHITECTURE.md) · [Capability roadmap](docs/technical/CAPABILITY_ROADMAP.md) · [Release checklist](docs/RELEASE.md) · [Case study template](docs/CASE_STUDY_TEMPLATE.md) · [Contributing](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md)
