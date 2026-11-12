@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in Pry behaves wrong, or a check gives a misleading result.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Do not include live credentials, cookies, API keys, personal data,
+        or third-party target details. Redact them.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The wrong behavior and what you expected instead.
+      placeholder: The scan reported EXPOSED, but the response was a login page.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: The exact command or test. Use a local fixture if possible.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Pry version
+      description: Output of `pry --version`.
+      placeholder: pry 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Docker version, and whether the target was local or live.
+      placeholder: macOS 15, Python 3.9.6, Docker 27, local repo
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Redact secrets, tokens, cookies, and user data.
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: This report does not include live credentials or personal data.
+          required: true
+        - label: The target was owned by me or I had written authorization.
+          required: true

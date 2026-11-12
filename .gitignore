@@ -12,6 +12,9 @@ dist/
 build/
 *.egg-info/
 
+# Local scan output from the CI action
+pry-run/
+
 # Env / secrets (BYOK for any LLM assist)
 .env
 .env.*

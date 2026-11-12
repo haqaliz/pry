@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability in Pry
+    url: https://github.com/haqaliz/pry/security/advisories/new
+    about: Report privately. Do not open a public issue for a vulnerability.
+  - name: Ethics and responsible disclosure
+    url: https://github.com/haqaliz/pry/blob/master/ETHICS.md
+    about: What an exposure does and does not assert.
+  - name: Documentation
+    url: https://github.com/haqaliz/pry/blob/master/docs/README.md
+    about: Architecture, roadmap, release, and contribution docs.

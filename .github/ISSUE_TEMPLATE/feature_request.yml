@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest a capability that strengthens reproduction and proof.
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pry's wedge is reproducing an exposure and capturing a signed pair. A feature that only
+        "looks risky" or guesses is out of scope.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: The user problem or gap, ideally from a real app you own.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: The capability and how you would use it.
+    validations:
+      required: true
+  - type: textarea
+    id: fit
+    attributes:
+      label: Why it fits Pry
+      description: |
+        Does it reproduce an exploit rather than infer one? Can it capture a request/response
+        pair? Does it respect ownership, read-only-by-default, intensity confirmation, data
+        minimization, and the no-"secure" verdict?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds or other approaches.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This is not a request for route discovery by guessing or brute force.
+          required: true
+        - label: This does not require a "SAFE" or "SECURE" verdict.
+          required: true
