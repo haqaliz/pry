@@ -553,3 +553,11 @@ def test_pages_workflow_exists():
     assert "actions/deploy-pages" in text
     assert "site/index.html" in text
     assert "assets/pry-demo.mp4" in text
+
+
+def test_donation_link_is_present():
+    readme = _read("README.md")
+    site = _read("site/index.html")
+    assert "nowpayments.io/donation" in readme
+    assert "Support the project" in readme
+    assert "nowpayments.io/donation" in site

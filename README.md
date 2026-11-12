@@ -689,6 +689,14 @@ Pry implements a strict ownership gate with:
 All capabilities implemented in Pry follow the test-first approach — failing tests are
 written first and then implemented.
 
+## Support the project
+
+If Pry is useful to you, you can chip in with a crypto donation:
+
+<a href="https://nowpayments.io/donation?api_key=52f38854-167a-4828-a00f-0424ab7dcc1e" target="_blank" rel="noreferrer noopener">
+    <img src="https://nowpayments.io/images/embeds/donation-button-black.svg" alt="Crypto donation button by NOWPayments">
+</a>
+
 ## License
 
 Apache-2.0
