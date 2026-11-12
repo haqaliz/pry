@@ -77,8 +77,7 @@ pry --version
 pry --help
 ```
 
-After the first PyPI publish, move `uv tool install pry-scanner` above the GitHub-tag install in
-the README.
+PyPI is live; keep `uv tool install pry-scanner` above the GitHub-tag fallback in the README.
 
 Or from the GitHub tag before PyPI is configured:
 

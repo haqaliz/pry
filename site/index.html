@@ -54,8 +54,8 @@
 
       <div class="terminal">
         <p class="terminal-bar"><span class="tick" aria-hidden="true"></span>quickstart</p>
-        <pre tabindex="0" aria-label="Install and quickstart commands"><code><span class="c"># install the released CLI (PyPI package: pry-scanner)</span>
-uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"
+        <pre tabindex="0" aria-label="Install and quickstart commands"><code><span class="c"># install from PyPI (or: pipx install pry-scanner)</span>
+uv tool install pry-scanner
 
 <span class="c"># local repo in a disposable Docker sandbox</span>
 pry scan ./my-app --report
@@ -181,7 +181,10 @@ pry verify-proof ~/.pry/runs/&lt;id&gt;/proofs/&lt;bundle&gt;.json</code></pre>
 
       <div class="terminal">
         <p class="terminal-bar"><span class="tick" aria-hidden="true"></span>install</p>
-        <pre tabindex="0" aria-label="Install commands"><code><span class="c"># from the v0.1.1 tag</span>
+        <pre tabindex="0" aria-label="Install commands"><code><span class="c"># install from PyPI</span>
+uv tool install pry-scanner
+
+<span class="c"># fallback: from the v0.1.1 tag</span>
 uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"
 
 <span class="c"># local repo, read-only floor</span>

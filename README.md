@@ -27,7 +27,7 @@ v0.1.1 · [website](https://haqaliz.github.io/pry/) · [changelog](CHANGELOG.md)
 | | |
 |---|---|
 | **What it proves** | An exposure you can reproduce, not a pattern that looks risky. |
-| **Install** | `uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"` |
+| **Install** | `uv tool install pry-scanner` |
 | **First scan** | `pry scan ./your-app` (local sandbox) or `pry scan https://your-app.example --token <token>` |
 | **Architecture** | [own → intake → probe → prove → report](docs/technical/ARCHITECTURE.md) |
 | **Roadmap** | [shipped, next, later](docs/ROADMAP.md) |
@@ -536,11 +536,12 @@ Requires Python 3.9+ and Docker for local intake. The PyPI distribution is
 **`pry-scanner`**; the installed command is **`pry`**.
 
 ```bash
-# Install from the v0.1.1 GitHub tag
-uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"
-
-# Once the PyPI project is published
+# Install from PyPI
 uv tool install pry-scanner
+# or: pipx install pry-scanner
+
+# Fallback: install from the v0.1.1 GitHub tag
+uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.1"
 
 pry --version
 pry --help
