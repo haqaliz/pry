@@ -456,3 +456,52 @@ def test_release_checklist_names_the_distribution():
     assert "`pry-scanner`" in text
     assert "PYPI_PUBLISH" in text
     assert "git tag -a vX.Y.Z" in text
+
+
+def test_readme_public_sections_are_present():
+    text = " ".join(_read("README.md").split())
+    assert "Start here" in text
+    assert "What Pry never claims" in text
+    assert "At a glance" in text
+    assert "pry-scanner" in text
+    assert "actions/workflows/ci.yml/badge.svg" in text
+
+
+def test_contributing_is_honest():
+    text = " ".join(_read("CONTRIBUTING.md").split())
+    assert "test-first" in text
+    assert "Docker integration tests are opt-in" in text
+    assert '"SAFE" or "SECURE" verdict' in text
+    assert "Pattern-matching as a verdict" in text
+
+
+def test_code_of_conduct_exists():
+    text = " ".join(_read("CODE_OF_CONDUCT.md").split())
+    assert "harassment-free" in text
+    assert "Contributor Covenant" in text
+
+
+def test_public_roadmap_has_next_and_not_doing():
+    text = " ".join(_read("docs/ROADMAP.md").split())
+    assert "Status at v0.1.0" in text
+    assert "Next." in text
+    assert "Deliberately not doing" in text
+    assert "Owner-approved discovery" in text
+
+
+def test_docs_index_links_the_public_docs():
+    text = " ".join(_read("docs/README.md").split())
+    assert "ARCHITECTURE" in text
+    assert "CONTRIBUTING" in text
+    assert "SECURITY" in text
+    assert "CASE_STUDY_TEMPLATE" in text
+
+
+def test_issue_and_pr_templates_exist():
+    for relative in (
+        ".github/ISSUE_TEMPLATE/bug_report.yml",
+        ".github/ISSUE_TEMPLATE/feature_request.yml",
+        ".github/ISSUE_TEMPLATE/config.yml",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+    ):
+        assert (ROOT / relative).is_file()

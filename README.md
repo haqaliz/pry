@@ -2,7 +2,47 @@
 
 **Pry proves that an app you own is exposed, by actually trying the exploit against it.**
 
+[![CI](https://github.com/haqaliz/pry/actions/workflows/ci.yml/badge.svg)](https://github.com/haqaliz/pry/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/haqaliz/pry)](https://github.com/haqaliz/pry/releases)
+[![License](https://img.shields.io/github/license/haqaliz/pry)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](pyproject.toml)
+
 v0.1.0 · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [release checklist](docs/RELEASE.md)
+
+## Start here
+
+| | |
+|---|---|
+| **What it proves** | An exposure you can reproduce, not a pattern that looks risky. |
+| **Install** | `uv tool install "pry-scanner @ git+https://github.com/haqaliz/pry@v0.1.0"` |
+| **First scan** | `pry scan ./your-app` (local sandbox) or `pry scan https://your-app.example --token <token>` |
+| **Architecture** | [own → intake → probe → prove → report](docs/technical/ARCHITECTURE.md) |
+| **Roadmap** | [shipped, next, later](docs/ROADMAP.md) |
+| **Contribute** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| **Report a vulnerability** | [SECURITY.md](SECURITY.md) (private advisory) |
+| **Ethics** | [ETHICS.md](ETHICS.md) |
+
+## At a glance
+
+| | |
+|---|---|
+| **Release** | v0.1.0 (2026-11-12) |
+| **Runtime** | Python 3.9+, Docker for local intake |
+| **In 0.1.0** | Read-only floor, Level 1 SSRF and rate limits, Level 2 writes, provider DB checks, signed proofs, replay, report |
+| **Not in 0.1.0** | IDOR/endpoint discovery, hosted reports, platform partnerships |
+| **Safety** | Ownership proof before live requests; read-only by default; explicit confirmation above Level 0 |
+
+## What Pry never claims
+
+- No `SAFE` or `SECURE` verdict. A clean result is `NOT_REPRODUCED`, never "secure".
+- No exploit without a captured request/response pair. A heuristic may prioritize; execution decides.
+- No live scan without ownership proof, and no higher intensity without explicit confirmation.
+- No route or object discovery by guessing.
+- No hardening check dressed up as `EXPOSED`. Missing headers and rate limits are observations.
+
+## Documentation
+
+[Docs index](docs/README.md) · [Architecture](docs/technical/ARCHITECTURE.md) · [Capability roadmap](docs/technical/CAPABILITY_ROADMAP.md) · [Release checklist](docs/RELEASE.md) · [Case study template](docs/CASE_STUDY_TEMPLATE.md) · [Contributing](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md)
 
 ## What This Is
 

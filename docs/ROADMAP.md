@@ -6,6 +6,28 @@ as the fallback. Stack: Python via `uv`.
 
 Milestone order is my proposal; reorder freely.
 
+## Status at v0.1.0 (2026-11-12)
+
+**Shipped.** Ownership gate (P1), local sandbox intake (P2), read-only floor probes and declared
+missing-auth, configured live/local IDOR, local/live Level 1 SSRF, local/live rate-limit
+observations, opt-in header observations, served database files, provider database marker checks,
+local/live Level 2 write confirmation, signed proof bundles, live read-only replay, and the local
+HTML report and corpus.
+
+**Next.** Two things matter more than another probe:
+
+1. **One real-world case study (M1.4)** on an app the owner controls, using the
+   [case-study template](CASE_STUDY_TEMPLATE.md) and `ETHICS.md`.
+2. **CI adoption.** The repository ships a composite GitHub Action for local scans; make it
+   boring and reliable for real repositories.
+
+**Later.** Owner-approved discovery (parse local routes and let the owner select; never guess),
+a signed report manifest, more database providers (Firestore, PocketBase, Appwrite), and the
+hosted report/P7 experiment.
+
+**Deliberately not doing.** Brute-force route or object discovery, a "SAFE" or "SECURE" verdict,
+live checks without ownership proof, and a hosted tier before a real finding.
+
 ---
 
 ## Phase 0: Ownership and ethics before anything runs (weeks 1-3)
