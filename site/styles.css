@@ -308,10 +308,11 @@ h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
 
 /* ---------- demo ---------- */
 
-.demo { margin: 0 auto; max-width: 860px; }
+.demo { margin: 0 auto; max-width: min(680px, 100%); }
 .demo img, .demo video {
   display: block;
   width: 100%;
+  max-width: 100%;
   height: auto;
   border: 1px solid var(--line-bright);
   border-radius: 12px;
