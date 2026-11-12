@@ -4,6 +4,12 @@ All notable changes to Pry are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Project logo, terminal demo GIF/MP4, and a GitHub Pages landing page.
+
 ## [0.1.0] - 2026-11-12
 
 First public release. PyPI package: `pry-scanner`; CLI: `pry`.

@@ -1,13 +1,26 @@
-# Pry - Security Exposure Scanner
+<div align="center">
 
-**Pry proves that an app you own is exposed, by actually trying the exploit against it.**
+<img src="assets/pry-mark.svg" alt="Pry" width="96" />
+
+# Pry
+
+**Prove it. Don't guess it.**
+
+Pry proves that an app you own is exposed, by actually trying the exploit against it, then
+captures a signed, replayable request/response pair. Read-only by default.
 
 [![CI](https://github.com/haqaliz/pry/actions/workflows/ci.yml/badge.svg)](https://github.com/haqaliz/pry/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/haqaliz/pry)](https://github.com/haqaliz/pry/releases)
 [![License](https://img.shields.io/github/license/haqaliz/pry)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](pyproject.toml)
 
-v0.1.0 · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [release checklist](docs/RELEASE.md)
+v0.1.0 · [website](https://haqaliz.github.io/pry/) · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [release checklist](docs/RELEASE.md)
+
+<img src="assets/pry-demo.gif" alt="A real local Pry run: four EXPOSED findings, an HTML report, and a valid signed proof." width="820" />
+
+<sub>A real local run: four <code>EXPOSED</code> findings, an HTML report, and a proof that verifies offline. <a href="assets/pry-demo.mp4">MP4</a></sub>
+
+</div>
 
 ## Start here
 

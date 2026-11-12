@@ -516,3 +516,38 @@ def test_readme_faq_is_honest():
     assert "No. The sandbox and proofs are local" in text
     assert "Does it discover endpoints?" in text
     assert "Discovery" in text
+
+
+def test_public_assets_exist():
+    for relative in (
+        "assets/pry-logo.svg",
+        "assets/pry-mark.svg",
+        "assets/pry-demo.gif",
+        "assets/pry-demo.mp4",
+        "assets/pry-demo-scan.png",
+        "assets/social-card.png",
+    ):
+        assert (ROOT / relative).is_file()
+        assert (ROOT / relative).stat().st_size > 0
+
+
+def test_readme_uses_the_logo_and_demo():
+    text = _read("README.md")
+    assert "assets/pry-mark.svg" in text
+    assert "assets/pry-demo.gif" in text
+    assert "haqaliz.github.io/pry" in text
+
+
+def test_site_references_only_local_assets():
+    text = " ".join(_read("site/index.html").split())
+    assert "assets/pry-mark.svg" in text
+    assert "assets/pry-demo.mp4" in text
+    assert "assets/pry-demo-scan.png" in text
+    assert "https://haqaliz.github.io/pry/assets/social-card.png" in text
+
+
+def test_pages_workflow_exists():
+    text = _read(".github/workflows/pages.yml")
+    assert "actions/deploy-pages" in text
+    assert "site/index.html" in text
+    assert "assets/pry-demo.mp4" in text
