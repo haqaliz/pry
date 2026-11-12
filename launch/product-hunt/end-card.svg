@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="1280" height="720" fill="#0b1116"/>
+<rect x="0" y="0" width="8" height="720" fill="#fe0100"/>
+<svg x="80" y="64" width="92" height="84" viewBox="250 260 520 480">
+    <g id="Background">
+        <path d="M482.496,380.038C385.282,381.572 271.565,409.25 268.686,407.194C265.267,404.752 269.145,393.859 271.727,380.554C282.849,323.253 281.415,322.52 284.791,318.761C285.647,317.807 479.31,274.973 697.382,347.881C702.167,349.481 753.797,366.742 756.19,370.669C756.321,370.884 760.148,413.031 752.109,435.363C732.353,490.247 666.091,458.384 525.627,507.882C415.861,546.562 421.692,599.863 422.961,611.461C429.061,667.215 492.352,711.127 490.184,716.384C488.99,719.279 487.617,718.654 288.5,718.706C277.177,718.709 273.178,721.762 271.261,710.543C216.663,391.083 687.305,429.066 636.504,415.49C632.178,414.334 571.054,416.868 569.293,413.643C565.085,405.935 576.059,386.061 514.532,381.001C498.545,379.686 498.666,380.018 482.496,380.038Z" style="fill:rgb(254,1,0);"/>
+        <path d="M546.501,416.026C533.15,413.704 538.996,402.541 539.644,401.61C548.543,388.807 566.802,413.224 546.501,416.026Z" style="fill:rgb(247,4,4);"/>
+    </g>
+</svg>
+<text x="196" y="112" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="700" fill="#eef3f6">Pry</text>
+<text x="80" y="270" font-family="Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#eef3f6">Try it on your own app.</text>
+<text x="80" y="318" font-family="Helvetica, Arial, sans-serif" font-size="26" fill="#9fb0bc">One command. A real request. A signed proof.</text>
+<rect x="80" y="376" width="760" height="96" rx="10" fill="#070c10" stroke="#22303a"/>
+<text x="106" y="418" font-family="Menlo, Consolas, monospace" font-size="18" fill="#ff4d4f">$ uv tool install pry-scanner</text>
+<text x="106" y="450" font-family="Menlo, Consolas, monospace" font-size="18" fill="#eef3f6">$ pry scan ./my-app --report</text>
+<text x="80" y="560" font-family="Menlo, Consolas, monospace" font-size="20" fill="#ff4d4f">github.com/haqaliz/pry</text>
+<text x="80" y="596" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#66757f">Apache-2.0 · Open source · No upload by default</text>
+<text x="80" y="664" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="#eef3f6">Prove it. Don't guess it.</text>
+</svg>

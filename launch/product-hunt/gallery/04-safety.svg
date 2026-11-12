@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1270" height="760" viewBox="0 0 1270 760">
+<rect width="1270" height="760" fill="#0b1116"/>
+<rect x="0" y="0" width="8" height="760" fill="#fe0100"/>
+<svg x="72" y="64" width="78" height="72" viewBox="250 260 520 480">
+    <g id="Background">
+        <path d="M482.496,380.038C385.282,381.572 271.565,409.25 268.686,407.194C265.267,404.752 269.145,393.859 271.727,380.554C282.849,323.253 281.415,322.52 284.791,318.761C285.647,317.807 479.31,274.973 697.382,347.881C702.167,349.481 753.797,366.742 756.19,370.669C756.321,370.884 760.148,413.031 752.109,435.363C732.353,490.247 666.091,458.384 525.627,507.882C415.861,546.562 421.692,599.863 422.961,611.461C429.061,667.215 492.352,711.127 490.184,716.384C488.99,719.279 487.617,718.654 288.5,718.706C277.177,718.709 273.178,721.762 271.261,710.543C216.663,391.083 687.305,429.066 636.504,415.49C632.178,414.334 571.054,416.868 569.293,413.643C565.085,405.935 576.059,386.061 514.532,381.001C498.545,379.686 498.666,380.018 482.496,380.038Z" style="fill:rgb(254,1,0);"/>
+        <path d="M546.501,416.026C533.15,413.704 538.996,402.541 539.644,401.61C548.543,388.807 566.802,413.224 546.501,416.026Z" style="fill:rgb(247,4,4);"/>
+    </g>
+</svg>
+<text x="172" y="98" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#eef3f6">PRY</text>
+<text x="172" y="126" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#ff4d4f">SAFETY</text>
+<text x="72" y="236" font-family="Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#eef3f6" letter-spacing="-2">Ownership first.</text>
+<text x="72" y="306" font-family="Helvetica, Arial, sans-serif" font-size="64" font-weight="700" fill="#eef3f6" letter-spacing="-2">No 'secure' claim.</text>
+<text x="72" y="360" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#9fb0bc">Live targets need DNS TXT or well-known-file</text>
+<text x="72" y="394" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#9fb0bc">proof. Read-only is the default; higher</text>
+<text x="72" y="428" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#9fb0bc">intensity needs explicit confirmation.</text>
+<text x="72" y="704" font-family="Menlo, Consolas, monospace" font-size="16" font-weight="400" fill="#66757f">github.com/haqaliz/pry/blob/master/ETHICS.md</text>
+<text x="72" y="500" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#28c840">✓</text>
+<text x="104" y="500" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#eef3f6">Ownership proof before any live request</text>
+<text x="72" y="546" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#28c840">✓</text>
+<text x="104" y="546" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#eef3f6">Local repo runs in a disposable Docker sandbox</text>
+<text x="72" y="592" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#28c840">✓</text>
+<text x="104" y="592" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#eef3f6">No third-party scanning. No upload.</text>
+<text x="72" y="638" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#28c840">✓</text>
+<text x="104" y="638" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#eef3f6">A clean result is NOT_REPRODUCED, never safe.</text>
+</svg>

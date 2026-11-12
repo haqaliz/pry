@@ -19,4 +19,8 @@ Technical:
 - [RELEASE](RELEASE.md) - release checklist and PyPI trusted publishing.
 - [CASE_STUDY_TEMPLATE](CASE_STUDY_TEMPLATE.md) - the M1.4 write-up template.
 
+Launch:
+
+- [Product Hunt kit](../launch/product-hunt/README.md) - copy, gallery, thumbnail, and demo video.
+
 Planning notes for in-flight work live under [`planning/`](planning/).
