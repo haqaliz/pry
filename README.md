@@ -31,6 +31,7 @@ v0.1.0 · [changelog](CHANGELOG.md) · [security policy](SECURITY.md) · [releas
 | **In 0.1.0** | Read-only floor, Level 1 SSRF and rate limits, Level 2 writes, provider DB checks, signed proofs, replay, report |
 | **Not in 0.1.0** | IDOR/endpoint discovery, hosted reports, platform partnerships |
 | **Safety** | Ownership proof before live requests; read-only by default; explicit confirmation above Level 0 |
+| **Stability** | 0.1.x beta; CLI flags and result shapes may change before 1.0 |
 
 ## What Pry never claims
 
