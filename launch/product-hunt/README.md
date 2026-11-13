@@ -6,7 +6,7 @@ Scheduled for a **2026-11-17** launch (00:00 America/Los_Angeles).
 
 | Asset | Path | Size |
 |---|---|---|
-| Thumbnail | `thumbnail-240.png` | 240×240 |
+| Thumbnail | `thumbnail-240.png` | 240×240, mark only |
 | Gallery 1 | `gallery/01-hero.png` | 1270×760 |
 | Gallery 2 | `gallery/02-wedge.png` | 1270×760 |
 | Gallery 3 | `gallery/03-proof.png` | 1270×760 |
