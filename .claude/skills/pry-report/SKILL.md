@@ -1,6 +1,6 @@
 ---
 name: pry-report
-description: Use when a Pry unit of work (bug, task, feature) is done and you want a brief, friendly, non-technical completion note saved on Desktop to share with the team.
+description: Use when a Pry unit of work (bug, task, feature) is done and you want a brief, friendly, non-technical completion note saved in the Projects Brain vault to share with the team.
 allowed-tools: Read, Grep, Glob, Bash, Write
 arguments: "type id"
 ---
@@ -16,7 +16,9 @@ Usage: `/pry-report bug 12` or `/pry-report feature ownership-verify`.
 
 ## Output
 
-Markdown file saved to `/Users/aliz/Desktop/{type}-{id}-completion.md`.
+Markdown file saved to `/Users/aliz/Documents/Projects Brain/at/pry/Cards/{type}-{id}/{type}-{id}-completion.md`.
+
+Vault rule: `mkdir -p` the card folder, add frontmatter (`project: pry`, `kind: completion`, `type`, `id`, `date`, `tags`) and `Part of [[pry]]`. Quote the path (it has a space).
 
 ## The template
 

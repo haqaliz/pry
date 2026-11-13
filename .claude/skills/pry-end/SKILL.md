@@ -1,6 +1,6 @@
 ---
 name: pry-end
-description: Use when finishing local work on a Pry unit of work after the PR is merged and you also need a completion report on Desktop. Triggers on "pry-end", "pe", "pe bug 12", "pe feat ownership-verify", "end full".
+description: Use when finishing local work on a Pry unit of work after the PR is merged and you also need a completion report in Projects Brain. Triggers on "pry-end", "pe", "pe bug 12", "pe feat ownership-verify", "end full".
 arguments: "type id"
 ---
 
