@@ -22,19 +22,13 @@ uses `assets/pry-demo.mp4` plus `end-card.png`; rebuild it with ffmpeg if the de
 Authenticated and used to create and schedule the launch. The draft was submitted with the
 Nov 17 date; status is `scheduled`, assessment `no_known_blockers`.
 
-The video is **not attached**: Product Hunt only accepts YouTube or Loom links for the video
-field, and the prepared file is a local/GitHub MP4. Upload `pry-product-hunt.mp4` to YouTube or
-Loom, then update the launch with that URL.
+The video is **intentionally not attached**: Product Hunt only accepts YouTube or Loom links
+for the video field, and the prepared file is a local/GitHub MP4. The launch does not need it.
 
 ## GitHub social preview
 
-GitHub still has **no REST/GraphQL/`gh` endpoint** for the repository social preview as of 2026.
-It is web-UI only:
-
-1. Repository **Settings → Social preview → Edit**.
-2. Upload `assets/social-card.png` (1280×640, under 1 MB).
-
-`assets/social-card.png` is ready.
+Uploaded and confirmed on the repository. GitHub has no REST/GraphQL/`gh` endpoint for this as
+of 2026, so it was a one-time web-UI upload of `assets/social-card.png`.
 
 ## Launch status
 
@@ -42,6 +36,8 @@ It is web-UI only:
 2. Done: preview reviewed and submitted; status is `scheduled` for 2026-11-17.
 3. Optional: add a YouTube/Loom video URL with `update_launch`.
 4. Add the Product Hunt badge to the site after the launch is live.
+5. Hacker News submission is prepared at `launch/hacker-news/submission.md`; submit manually
+   on Nov 18 or 19 so it does not collide with the Product Hunt launch.
 
 ## Notes
 

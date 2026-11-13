@@ -22,5 +22,6 @@ Technical:
 Launch:
 
 - [Product Hunt kit](../launch/product-hunt/README.md) - copy, gallery, thumbnail, and demo video.
+- [Hacker News submission](../launch/hacker-news/submission.md) - prefilled submit link and first comment.
 
 Planning notes for in-flight work live under [`planning/`](planning/).
