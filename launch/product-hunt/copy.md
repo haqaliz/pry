@@ -1,7 +1,7 @@
 # Product Hunt launch copy
 
 **Launch date:** Tuesday, 2026-11-17 (00:00 America/Los_Angeles).
-**Status:** draft kit ready; Product Hunt MCP is not authenticated yet.
+**Status:** scheduled (launch ID 1315776); public 2026-11-17 at 00:00 PT.
 
 ## Listing
 
